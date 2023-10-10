@@ -5,45 +5,52 @@ var colormap_texture: texture_2d<f32>;
 @group(1) @binding(5)
 var colormap_sampler: sampler;
 
-// Group the uniforms into a single block
-struct MandelbrotMaterial {
+struct MandelbrotUniforms {
     max_iterations: u32,
     color_scale: f32,
-    offset: vec2<f32>,
     zoom: f32,
+    offset: vec2<f32>,
 };
-@group(2) @binding(0)
-var<uniform> mandelbrotMaterial: MandelbrotMaterial;
 
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) world_position: vec4<f32>,
-    @location(1) world_normal: vec3<f32>,
-    @location(2) uv: vec2<f32>,
-};
+@group(0) @binding(0)
+var<uniform> mandelbrotMaterial: MandelbrotUniforms;
 
 @fragment
-fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
-    let c = (input.world_position.xy / vec2<f32>(1920.0, 1080.0)) * mandelbrotMaterial.zoom - mandelbrotMaterial.offset;
-    var z = vec2<f32>(0.0, 0.0);
-    var n: f32 = 0.0;
-    
-    for(var i: u32 = 0u; i < mandelbrotMaterial.max_iterations; i = i + 1u) {
-        z = vec2<f32>(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-        if (dot(z, z) > 4.0) { break; };
-        n = n + 1.0;
+fn fragment(
+    @builtin(position) coord: vec4<f32>,
+    @location(0) world_position: vec4<f32>,
+    @location(1) normals: vec3<f32>,
+    @location(2) uv: vec2<f32>
+) -> @location(0) vec4<f32> {
+    var c: vec2<f32> = uv * 4.0 - 2.0;
+    var z: vec2<f32> = vec2<f32>(0.0, 0.0);
+    var iteration: f32 = 0.0;
+    //let max_iterations: f32 = (10000.0 * mandelbrotMaterial.zoom);
+    let max_iterations: f32 = 1000.0;
+
+    // Check for early exit
+    let q: f32 = (c.x - 0.25) * (c.x - 0.25) + c.y * c.y;
+    if (q * (q + (c.x - 0.25)) < 0.25 * c.y * c.y || (c.x + 1.0) * (c.x + 1.0) + c.y * c.y < 0.0625) {
+        iteration = max_iterations;
+    } else {
+        while (iteration < max_iterations) {
+            let x: f32 = (z.x * z.x - z.y * z.y) + c.x;
+            let y: f32 = (2.0 * z.x * z.y) + c.y;
+            if (abs(x) > 2.0 || abs(y) > 2.0) {
+                break;
+            }
+            z.x = x;
+            z.y = y;
+            iteration = iteration + 1.0;
+        }
     }
-    
-    let escape_value = n / f32(mandelbrotMaterial.max_iterations);
 
-    // Sample a color from the colormap_texture using the escape value
-    let color = textureSample(colormap_texture, colormap_sampler, vec2<f32>(escape_value, 0.5));
+    // Convert iteration count to color
+    let basic_color: f32 = f32(iteration) / f32(max_iterations);
+    let adjusted_color = pow(basic_color, 0.3);
+    let color = adjusted_color * (1.0 - mandelbrotMaterial.color_scale) + mandelbrotMaterial.color_scale;
 
-    if (n == f32(mandelbrotMaterial.max_iterations)) {
-        let color = vec4<f32>(0.0, 0.0, 0.0, 1.0); // Black for points inside the Mandelbrot set
-    }
-
-    
-    return color;
-    //return vec4<f32>(1.0, 0.0, 0.0, 1.0); // Red color
+    // Sample from the colormap texture
+    let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(color, 0.5));
+    return colormap_color;
 }

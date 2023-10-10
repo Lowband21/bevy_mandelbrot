@@ -18,8 +18,8 @@ fn vertex(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
 
     output.clip_position = transform * vec4<f32>(input.position, 1.0);
-    output.world_position = output.clip_position; // for a simple shader this might be the same, but often it could be different if you had lighting calculations.
-    output.world_normal = vec3<f32>(0.0, 0.0, 1.0); // for a 2D sprite the normal might just point out of the screen
+    output.world_position = output.clip_position;
+    output.world_normal = vec3<f32>(0.0, 0.0, 1.0);
     output.uv = input.uv;
 
     return output;
