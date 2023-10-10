@@ -5,7 +5,7 @@ var colormap_texture: texture_2d<f32>;
 @group(1) @binding(5)
 var colormap_sampler: sampler;
 
-struct MandelbrotUniforms {
+struct MandelbrotMaterial {
     color_scale: f32,
     max_iterations: u32,
     zoom: f32,
@@ -13,7 +13,7 @@ struct MandelbrotUniforms {
 };
 
 @group(0) @binding(0)
-var<uniform> mandelbrotMaterial: MandelbrotUniforms;
+var<uniform> mandelbrotMaterial: MandelbrotMaterial;
 
 @fragment
 fn fragment(
@@ -25,7 +25,6 @@ fn fragment(
     var c: vec2<f32> = uv * 4.0 - 2.0;
     var z: vec2<f32> = vec2<f32>(0.0, 0.0);
     var iteration: f32 = 0.0;
-    //let max_iterations: f32 = (10000.0 * mandelbrotMaterial.zoom);
     let max_iterations: f32 = 1000.0;
 
     // Check for early exit
@@ -54,4 +53,5 @@ fn fragment(
     let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(color, 0.5));
     return colormap_color;
 
+    //return vec4<f32>(mandelbrotMaterial.color_scale, mandelbrotMaterial.color_scale, mandelbrotMaterial.color_scale, 1.0);
 }

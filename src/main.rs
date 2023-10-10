@@ -3,13 +3,18 @@ use bevy::render::render_graph::RenderGraph;
 use bevy_pancam::{PanCam, PanCamPlugin};
 
 use bevy::reflect::TypePath;
+
 use bevy::render::render_resource::{
-    AsBindGroup, BlendState, BufferAddress, ColorTargetState, ColorWrites, FragmentState,
-    IndexFormat, MultisampleState, PipelineDescriptor, PrimitiveState, PrimitiveTopology,
-    RenderPipeline, RenderPipelineDescriptor, ShaderRef, ShaderStages, TextureFormat,
-    VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
+    encase, AsBindGroup, BlendState, BufferAddress, ColorTargetState, ColorWrites, FragmentState,
+    IndexFormat, MultisampleState, OwnedBindingResource, PipelineDescriptor, PrimitiveState,
+    PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderRef, ShaderStages,
+    TextureFormat, UniformBuffer, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
+    VertexStepMode,
 };
-use bevy::sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle};
+use bevy::render::renderer::RenderQueue;
+use bevy::sprite::{
+    Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle, RenderMaterials2d,
+};
 
 use std::borrow::Cow;
 
@@ -20,19 +25,20 @@ use bevy::reflect::TypeUuid;
 use bevy::render::mesh::Indices;
 
 fn main() {
-    App::new()
+    let app = App::new()
         //.insert_resource(ClearColor(Color::hex("071f3c").unwrap()))
         .add_plugins(DefaultPlugins)
         .add_plugins(PanCamPlugin::default())
         .add_plugins(LogDiagnosticsPlugin::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, mandelbrot_uniform_update_system)
         .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default())
+        .add_systems(Update, mandelbrot_uniform_update_system)
         .run();
 }
 
 struct MandelbrotUniforms {
+    color_scale: f32,
     offset: Vec2,
     zoom: f32,
     max_iterations: f32,
@@ -60,8 +66,11 @@ impl Material for BasicMaterial {
 struct MandelbrotMaterial {
     #[uniform(0)]
     color_scale: f32,
+    #[uniform(0)]
     max_iterations: u32,
+    #[uniform(0)]
     offset: Vec2,
+    #[uniform(0)]
     zoom: f32,
     #[texture(4)]
     #[sampler(5)]
@@ -76,7 +85,6 @@ impl Material2d for MandelbrotMaterial {
         "shaders/mandelbrot_fragment.wgsl".into()
     }
 }
-
 //fn setup(
 //    mut commands: Commands,
 //    asset_server: Res<AssetServer>,
@@ -120,7 +128,7 @@ fn mandelbrot_uniform_update_system(
     time: Res<Time>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
 ) {
-    for (id, mut material) in materials.iter_mut() {
+    for (_, mut material) in materials.iter_mut() {
         // Oscillate color_scale between 0 and 1 using a sinusoidal function
         material.color_scale = 0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.5).sin());
 
@@ -142,7 +150,7 @@ fn prepare_mandelbrot_material(
 ) -> Handle<MandelbrotMaterial> {
     let material = MandelbrotMaterial {
         max_iterations: uniforms.max_iterations as u32,
-        color_scale: 0.5, // You can adjust this as needed.
+        color_scale: uniforms.color_scale, // You can adjust this as needed.
         offset: uniforms.offset,
         zoom: uniforms.zoom,
         colormap_texture: colormap_texture_handle,
@@ -158,6 +166,7 @@ fn setup(
     let colormap_texture_handle = asset_server.load("bing_ai_gradient.png");
 
     let uniforms = MandelbrotUniforms {
+        color_scale: 0.5,
         offset: Vec2::new(5.0, 0.0),
         zoom: 1.00,
         max_iterations: 1000.0,
