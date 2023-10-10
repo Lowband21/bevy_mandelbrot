@@ -6,8 +6,8 @@ var colormap_texture: texture_2d<f32>;
 var colormap_sampler: sampler;
 
 struct MandelbrotUniforms {
-    max_iterations: u32,
     color_scale: f32,
+    max_iterations: u32,
     zoom: f32,
     offset: vec2<f32>,
 };
@@ -53,4 +53,5 @@ fn fragment(
     // Sample from the colormap texture
     let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(color, 0.5));
     return colormap_color;
+
 }

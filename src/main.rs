@@ -27,7 +27,7 @@ fn main() {
         .add_plugins(LogDiagnosticsPlugin::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Startup, mandelbrot_uniform_update_system)
+        .add_systems(Update, mandelbrot_uniform_update_system)
         .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default())
         .run();
 }
@@ -59,8 +59,8 @@ impl Material for BasicMaterial {
 #[uuid = "148ef22b-c53e-4bc2-982c-bb2b102e38f8"]
 struct MandelbrotMaterial {
     #[uniform(0)]
-    max_iterations: u32,
     color_scale: f32,
+    max_iterations: u32,
     offset: Vec2,
     zoom: f32,
     #[texture(4)]
@@ -120,18 +120,18 @@ fn mandelbrot_uniform_update_system(
     time: Res<Time>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
 ) {
-    for (id, material) in materials.iter_mut() {
-        // Here, you can update your uniforms as you want, for example:
-        material.offset += Vec2::new(time.delta_seconds(), 0.0);
-        println!(
-            "{:?}, {:?}, {:?}, {:?}, {:?}",
-            material.offset,
-            material.zoom,
-            material.color_scale,
-            material.max_iterations,
-            material.colormap_texture,
-        );
-        // ... and any other updates you'd like to do.
+    for (id, mut material) in materials.iter_mut() {
+        // Oscillate color_scale between 0 and 1 using a sinusoidal function
+        material.color_scale = 0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.5).sin());
+
+        //println!(
+        //    "{:?}, {:?}, {:?}, {:?}, {:?}",
+        //    material.offset,
+        //    material.zoom,
+        //    material.color_scale,
+        //    material.max_iterations,
+        //    material.colormap_texture,
+        //);
     }
 }
 
@@ -158,7 +158,7 @@ fn setup(
     let colormap_texture_handle = asset_server.load("bing_ai_gradient.png");
 
     let uniforms = MandelbrotUniforms {
-        offset: Vec2::new(0.0, 0.0),
+        offset: Vec2::new(5.0, 0.0),
         zoom: 1.00,
         max_iterations: 1000.0,
     };
@@ -168,11 +168,7 @@ fn setup(
         size: Vec2::new(10000.0, 10000.0),
         flip: false,
     });
-    //mesh.set_indices(Some(Indices::U16(vec![0, 1, 2, 2, 3, 0])));
-    //mesh.insert_attribute(
-    //    Mesh::ATTRIBUTE_UV_0,
-    //    vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
-    //);
+
     let mandelbrot_mesh: Mesh2dHandle = Mesh2dHandle(meshes.add(mesh.clone()));
 
     commands.spawn(MaterialMesh2dBundle {
