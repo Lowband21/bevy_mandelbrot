@@ -15,6 +15,7 @@ fn main() {
     let app = App::new()
         //.insert_resource(ClearColor(Color::hex("071f3c").unwrap()))
         .add_plugins(DefaultPlugins)
+        .add_plugins(bevy_egui::EguiPlugin)
         .add_plugins(PanCamPlugin::default())
         .add_plugins(LogDiagnosticsPlugin::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())

@@ -34,7 +34,6 @@ impl Plugin for PanCamPlugin {
         )
         .register_type::<PanCam>();
 
-        #[cfg(feature = "bevy_egui")]
         {
             app.init_resource::<EguiWantsFocus>()
                 .add_systems(PostUpdate, check_egui_wants_focus)
@@ -47,11 +46,9 @@ impl Plugin for PanCamPlugin {
 }
 
 #[derive(Resource, Deref, DerefMut, PartialEq, Eq, Default)]
-#[cfg(feature = "bevy_egui")]
 struct EguiWantsFocus(bool);
 
 // todo: make run condition when Bevy supports mutable resources in them
-#[cfg(feature = "bevy_egui")]
 fn check_egui_wants_focus(
     mut contexts: Query<&mut bevy_egui::EguiContext>,
     mut wants_focus: ResMut<EguiWantsFocus>,
