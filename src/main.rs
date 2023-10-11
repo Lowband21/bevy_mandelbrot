@@ -1,28 +1,15 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use bevy::prelude::*;
-use bevy::render::render_graph::RenderGraph;
-use bevy_pancam::{PanCam, PanCamPlugin};
 
+mod pancam;
+use crate::pancam::{PanCam, PanCamPlugin};
 use bevy::reflect::TypePath;
 
-use bevy::render::render_resource::{
-    encase, AsBindGroup, BlendState, BufferAddress, ColorTargetState, ColorWrites, FragmentState,
-    IndexFormat, MultisampleState, OwnedBindingResource, PipelineDescriptor, PrimitiveState,
-    PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderRef, ShaderStages,
-    TextureFormat, UniformBuffer, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
-    VertexStepMode,
-};
-use bevy::render::renderer::RenderQueue;
-use bevy::sprite::{
-    Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle, RenderMaterials2d,
-};
+use bevy::render::render_resource::{AsBindGroup, ShaderRef};
+use bevy::sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle};
 
-use std::borrow::Cow;
-
-use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
-use bevy::pbr::MaterialMeshBundle;
-use bevy::prelude::*;
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::reflect::TypeUuid;
-use bevy::render::mesh::Indices;
 
 fn main() {
     let app = App::new()
@@ -85,45 +72,6 @@ impl Material2d for MandelbrotMaterial {
         "shaders/mandelbrot_fragment.wgsl".into()
     }
 }
-//fn setup(
-//    mut commands: Commands,
-//    asset_server: Res<AssetServer>,
-//    mut meshes: ResMut<Assets<Mesh>>,
-//    mut materials: ResMut<Assets<BasicMaterial>>,
-//) {
-//    let texture_handle = asset_server.load("viridis.png"); // This will be our test texture
-//
-//    commands
-//        .spawn(Camera2dBundle {
-//            transform: Transform::from_xyz(0.0, 0.0, 10.0), // Move the camera back
-//            ..Default::default()
-//        })
-//        .insert(PanCam {
-//            grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
-//            enabled: true,
-//            zoom_to_cursor: true,
-//            min_scale: 1.,
-//            max_scale: Some(40.),
-//            ..Default::default()
-//        });
-//
-//    let material = BasicMaterial {
-//        texture: texture_handle,
-//    };
-//    let mesh: Handle<Mesh> = meshes.add(Mesh::from(shape::Quad {
-//        size: Vec2::new(2.0, 2.0),
-//        flip: false,
-//    }));
-//    let material_handle: Handle<BasicMaterial> = materials.add(material);
-//
-//    commands.spawn(MaterialMeshBundle {
-//        mesh: mesh,
-//        material: material_handle,
-//        transform: Transform::from_xyz(0.0, 0.0, 0.0),
-//        ..Default::default()
-//    });
-//}
-//
 fn mandelbrot_uniform_update_system(
     time: Res<Time>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
@@ -163,7 +111,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
 ) {
-    let colormap_texture_handle = asset_server.load("bing_ai_gradient.png");
+    let colormap_texture_handle = asset_server.load("gradient.png");
 
     let uniforms = MandelbrotUniforms {
         color_scale: 0.5,
