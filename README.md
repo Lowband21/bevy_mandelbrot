@@ -1,7 +1,7 @@
 # Mandelbrot Fractal Viewer
 An immersive Bevy-powered application that lets you explore the beautiful intricacies of the Mandelbrot fractal. Dive deep into the fractal's infinite intricacies, panning and zooming to witness the awe-inspiring patterns that emerge.
 
-![screenshot_1](https://github.com/Lowband21/bevy_mandelbrot/master/screenshot_1.png)
+![screenshot 1](https://raw.githubusercontent.com/Lowband21/bevy_mandelbrot/master/screenshot_1.png)
 
 
 
