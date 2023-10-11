@@ -1,30 +1,44 @@
+// This attribute indicates that if the code is not compiled with debug assertions (i.e., in release mode),
+// the application should run with a "windows" subsystem (i.e., without a console window in Windows OS).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+// Importing required modules and traits from the `bevy` crate.
 use bevy::prelude::*;
 
+// Local module import for custom camera controls.
 mod pancam;
 use crate::pancam::{PanCam, PanCamPlugin};
-use bevy::reflect::TypePath;
 
+// Additional imports from the `bevy` crate, useful for rendering and diagnostics.
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+use bevy::input::common_conditions::input_toggle_active;
+use bevy::reflect::TypePath;
+use bevy::reflect::TypeUuid;
 use bevy::render::render_resource::{AsBindGroup, ShaderRef};
 use bevy::sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle};
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
-use bevy::reflect::TypeUuid;
-
+// The main function to initialize and run the Bevy app.
 fn main() {
-    let app = App::new()
+    // Initializing the Bevy app and adding various plugins.
+    let _app = App::new()
+        // Uncomment to set a custom clear color for the renderer.
         //.insert_resource(ClearColor(Color::hex("071f3c").unwrap()))
         .add_plugins(DefaultPlugins)
-        .add_plugins(bevy_egui::EguiPlugin)
-        .add_plugins(PanCamPlugin::default())
-        .add_plugins(LogDiagnosticsPlugin::default())
-        .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        .add_systems(Startup, setup)
-        .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default())
-        .add_systems(Update, mandelbrot_uniform_update_system)
+        .add_plugins(
+            // Add an inspector that can be toggled using the Escape key.
+            WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Escape)),
+        )
+        .add_plugins(PanCamPlugin::default()) // Custom camera control plugin.
+        .add_plugins(LogDiagnosticsPlugin::default()) // For logging diagnostics.
+        .add_plugins(FrameTimeDiagnosticsPlugin::default()) // Diagnostics for frame time.
+        .add_systems(Startup, setup) // Setup function called at startup.
+        .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default()) // Plugin for 2D materials.
+        .add_systems(Update, mandelbrot_uniform_update_system) // Update system for Mandelbrot material.
         .run();
 }
 
+// Struct to store uniform parameters for the Mandelbrot fractal.
 struct MandelbrotUniforms {
     color_scale: f32,
     offset: Vec2,
@@ -32,23 +46,7 @@ struct MandelbrotUniforms {
     max_iterations: f32,
 }
 
-#[derive(Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
-#[uuid = "148ef27b-c53e-4bc2-982c-bb2b102e38f8"]
-struct BasicMaterial {
-    #[texture(0)]
-    texture: Handle<Image>,
-}
-
-impl Material for BasicMaterial {
-    fn vertex_shader() -> ShaderRef {
-        "shaders/basic_vertex.wgsl".into()
-    }
-
-    fn fragment_shader() -> ShaderRef {
-        "shaders/basic_fragment.wgsl".into()
-    }
-}
-
+// Mandelbrot material definition. It holds parameters and texture for the Mandelbrot fractal.
 #[derive(Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
 #[uuid = "148ef22b-c53e-4bc2-982c-bb2b102e38f8"]
 struct MandelbrotMaterial {
@@ -64,34 +62,24 @@ struct MandelbrotMaterial {
     #[sampler(5)]
     colormap_texture: Handle<Image>,
 }
-impl Material2d for MandelbrotMaterial {
-    //fn vertex_shader() -> ShaderRef {
-    //    "shaders/mandelbrot_vertex.wgsl".into()
-    //}
 
+impl Material2d for MandelbrotMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/mandelbrot_fragment.wgsl".into()
     }
 }
+
+// System to update the Mandelbrot material's color_scale based on time.
 fn mandelbrot_uniform_update_system(
     time: Res<Time>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
 ) {
     for (_, mut material) in materials.iter_mut() {
-        // Oscillate color_scale between 0 and 1 using a sinusoidal function
         material.color_scale = 0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.5).sin());
-
-        //println!(
-        //    "{:?}, {:?}, {:?}, {:?}, {:?}",
-        //    material.offset,
-        //    material.zoom,
-        //    material.color_scale,
-        //    material.max_iterations,
-        //    material.colormap_texture,
-        //);
     }
 }
 
+// Utility function to prepare and return a Mandelbrot material with the given uniforms.
 fn prepare_mandelbrot_material(
     uniforms: MandelbrotUniforms,
     colormap_texture_handle: Handle<Image>,
@@ -99,43 +87,52 @@ fn prepare_mandelbrot_material(
 ) -> Handle<MandelbrotMaterial> {
     let material = MandelbrotMaterial {
         max_iterations: uniforms.max_iterations as u32,
-        color_scale: uniforms.color_scale, // You can adjust this as needed.
+        color_scale: uniforms.color_scale,
         offset: uniforms.offset,
         zoom: uniforms.zoom,
         colormap_texture: colormap_texture_handle,
     };
     materials.add(material)
 }
+
+// The setup function initializes entities in the Bevy app, such as the Mandelbrot mesh and camera.
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
 ) {
+    // Load colormap texture for the Mandelbrot material.
     let colormap_texture_handle = asset_server.load("gradient.png");
 
+    // Define uniform values for the Mandelbrot material.
     let uniforms = MandelbrotUniforms {
         color_scale: 0.5,
         offset: Vec2::new(5.0, 0.0),
         zoom: 1.00,
         max_iterations: 1000.0,
     };
+
+    // Create and store Mandelbrot material.
     let mandelbrot_material_handle =
         prepare_mandelbrot_material(uniforms, colormap_texture_handle, &mut materials);
+
+    // Create a large quad mesh.
     let mesh = Mesh::from(shape::Quad {
         size: Vec2::new(10000.0, 10000.0),
         flip: false,
     });
-
     let mandelbrot_mesh: Mesh2dHandle = Mesh2dHandle(meshes.add(mesh.clone()));
 
+    // Spawn the Mandelbrot mesh with its material in the world.
     commands.spawn(MaterialMesh2dBundle {
         mesh: mandelbrot_mesh,
         material: mandelbrot_material_handle,
         transform: Transform::from_xyz(0.0, 0.5, 0.0),
         ..Default::default()
     });
-    // Add the camera with PanCam component for panning and zooming
+
+    // Add a camera with custom pan and zoom capabilities.
     commands.spawn(Camera2dBundle::default()).insert(PanCam {
         grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
         enabled: true,
@@ -153,5 +150,4 @@ fn setup(
         delta_zoom_translation: None,
         ..default()
     });
-    //commands.spawn(Camera2dBundle::default());
 }

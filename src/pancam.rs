@@ -63,6 +63,7 @@ fn check_egui_wants_focus(
     wants_focus.set_if_neq(EguiWantsFocus(new_wants_focus));
 }
 
+// System that applies constraints on the camera's position and zoom based on defined bounds.
 fn apply_constraints_system(
     mut query: Query<(&PanCam, &mut OrthographicProjection, &mut Transform)>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
@@ -126,6 +127,7 @@ fn apply_constraints_system(
     }
 }
 
+// Interpolation system for smooth camera zoom transitions.
 fn zoom_interpolation_system(
     mut query: Query<(&mut PanCam, &mut OrthographicProjection, &mut Transform)>,
     time: Res<Time>,
@@ -181,6 +183,7 @@ fn zoom_interpolation_system(
     }
 }
 
+// Handle camera zooming based on mouse wheel events and target zoom levels.
 fn camera_zoom(
     keyboard_input: Res<Input<KeyCode>>,
     mut query: Query<(&mut PanCam, &mut OrthographicProjection, &mut Transform)>,
@@ -293,6 +296,7 @@ fn max_scale_within_bounds(
     bounds_size / base_world_size
 }
 
+// Handle camera movement based on mouse drag events.
 fn camera_movement(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mouse_buttons: Res<Input<MouseButton>>,
@@ -401,6 +405,7 @@ pub struct PanCam {
 }
 
 impl Default for PanCam {
+    // Default values for the PanCam component.
     fn default() -> Self {
         Self {
             grab_buttons: vec![MouseButton::Left, MouseButton::Right, MouseButton::Middle],
@@ -423,6 +428,7 @@ impl Default for PanCam {
     }
 }
 
+// Unit tests to verify the behavior of functions within this module.
 #[cfg(test)]
 mod tests {
     use std::f32::INFINITY;

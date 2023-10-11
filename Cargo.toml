@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.11.3", features = ["wayland", "bevy_render"]}
+bevy-inspector-egui = "0.20.0"
 bevy_egui = "0.22.0"
 wgpu = "0.17.1"
