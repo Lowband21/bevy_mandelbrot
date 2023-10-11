@@ -24,7 +24,9 @@ impl Plugin for PanCamPlugin {
             Update,
             (
                 camera_movement.before(apply_constraints_system),
-                camera_zoom.before(apply_constraints_system),
+                camera_zoom
+                    .before(apply_constraints_system)
+                    .before(zoom_interpolation_system),
                 zoom_interpolation_system.before(apply_constraints_system),
                 apply_constraints_system,
             )
@@ -135,23 +137,48 @@ fn zoom_interpolation_system(
 
     for (mut cam, mut proj, mut transform) in query.iter_mut() {
         if cam.is_zooming {
-            if (cam.target_zoom - proj.scale).abs() > 0.01 {
-                if let Some(target_translation) = cam.target_translation {
-                    // Interpolate zoom
-                    proj.scale += (cam.target_zoom - proj.scale) * interpolation_factor;
+            let zoom_difference = cam.target_zoom - proj.scale;
 
-                    // Interpolate position
-                    transform.translation.x +=
-                        (target_translation.x - transform.translation.x) * interpolation_factor;
-                    transform.translation.y +=
-                        (target_translation.y - transform.translation.y) * interpolation_factor;
-                }
+            // Scaling interpolation
+            let zoom_step = zoom_difference * interpolation_factor;
+            if zoom_difference.signum() == (cam.target_zoom - (proj.scale + zoom_step)).signum() {
+                proj.scale += zoom_step;
             } else {
                 proj.scale = cam.target_zoom;
-                if let Some(target) = cam.target_translation {
-                    transform.translation = target;
+                cam.first_zoom = false;
+            }
+
+            // Positional interpolation
+            if let Some(target_translation) = cam.target_translation {
+                let translation_diff = target_translation - transform.translation;
+                let translation_step = translation_diff * interpolation_factor;
+
+                if translation_diff.x.signum()
+                    == (target_translation.x - (transform.translation.x + translation_step.x))
+                        .signum()
+                {
+                    transform.translation.x += translation_step.x;
+                } else {
+                    transform.translation.x = target_translation.x;
                 }
+
+                if translation_diff.y.signum()
+                    == (target_translation.y - (transform.translation.y + translation_step.y))
+                        .signum()
+                {
+                    transform.translation.y += translation_step.y;
+                } else {
+                    transform.translation.y = target_translation.y;
+                }
+            }
+
+            // Reset zooming flag if close to target values
+            if zoom_difference.abs() <= 0.1
+                && (cam.target_translation.is_none()
+                    || (cam.target_translation.unwrap() - transform.translation).length() <= 0.01)
+            {
                 cam.is_zooming = false;
+                cam.first_zoom = false;
             }
         }
     }
@@ -168,22 +195,18 @@ fn camera_zoom(
 
     // Check if left shift is pressed
     let shift_multiplier = if keyboard_input.pressed(KeyCode::ShiftLeft) {
-        1.0
+        15.0
     } else {
         3.0
     };
 
-    let scroll = scroll_events
+    let mut scroll = scroll_events
         .iter()
         .map(|ev| match ev.unit {
             MouseScrollUnit::Pixel => ev.y,
             MouseScrollUnit::Line => ev.y * pixels_per_line,
         })
         .sum::<f32>();
-
-    if scroll == 0. {
-        return;
-    }
 
     let window = primary_window.single();
     let window_size = Vec2::new(window.width(), window.height());
@@ -192,47 +215,72 @@ fn camera_zoom(
         .map(|cursor_pos| (cursor_pos / window_size) * 2. - Vec2::ONE)
         .map(|p| Vec2::new(p.x, -p.y));
 
-    for (mut cam, proj, pos) in &mut query {
-        if cam.enabled {
-            // Compute dynamic zoom factor based on the current scale
-            let dynamic_zoom_factor = proj.scale.min(0.5);
-
-            // Adjust the zoom multiplier with the dynamic factor
-            let zoom_multiplier = base_zoom_multiplier * dynamic_zoom_factor * shift_multiplier;
-
-            let old_scale = proj.scale;
-            cam.target_zoom =
-                (old_scale * (1.0 + -scroll * 0.001 * zoom_multiplier)).max(cam.min_scale);
-
-            if let Some(mouse_normalized_screen_pos) = mouse_normalized_screen_pos {
-                let proj_size = proj.area.max / old_scale;
-                let mouse_world_pos = pos.translation.truncate()
-                    + mouse_normalized_screen_pos * proj_size * old_scale;
-
-                cam.target_translation = Some(
-                    (mouse_world_pos - mouse_normalized_screen_pos * proj_size * cam.target_zoom)
-                        .extend(pos.translation.z),
-                );
-            }
-
-            if let Some(mouse_normalized_screen_pos) = mouse_normalized_screen_pos {
-                let proj_size = proj.area.max / old_scale;
-                let mouse_world_pos_before = pos.translation.truncate()
-                    + mouse_normalized_screen_pos * proj_size * old_scale;
-                let mouse_world_pos_after = pos.translation.truncate()
-                    + mouse_normalized_screen_pos * proj_size * cam.target_zoom;
-                cam.delta_zoom_translation =
-                    Some((mouse_world_pos_before - mouse_world_pos_after).extend(0.0));
+    for (mut cam, mut proj, pos) in &mut query {
+        println!("Current scale: {:?}", proj.scale);
+        println!("Target scale: {:?}", cam.target_zoom);
+        if scroll == 0.0
+            && cam.first_zoom
+            && (proj.scale.signum() < cam.target_zoom.signum()
+                || proj.scale.signum() > cam.target_zoom.signum())
+        {
+            if proj.scale.signum() != cam.target_zoom.signum() {
+                scroll = 10.0; // adjust this value to your desired initial zoom factor
             } else {
-                cam.delta_zoom_translation = Some(Vec3::ZERO);
+                cam.first_zoom = false;
             }
+        }
+        if !cam.initialized && !cam.first_zoom {
+            proj.scale = cam.current_zoom;
+            scroll = 1.0; // adjust this value to your desired initial zoom factor
+            cam.first_zoom = true;
+            cam.is_zooming = true; // Ensure the camera starts zooming on initialization
+            cam.initialized = true;
+        }
 
-            // set the zooming flag
-            cam.is_zooming = true;
+        if scroll != 0.0 || cam.is_zooming {
+            if cam.enabled {
+                // Compute dynamic zoom factor based on the current scale
+                let dynamic_zoom_factor = proj.scale.min(0.5);
+
+                // Adjust the zoom multiplier with the dynamic factor
+                let zoom_multiplier = base_zoom_multiplier * dynamic_zoom_factor * shift_multiplier;
+
+                let old_scale = proj.scale;
+                if !cam.first_zoom {
+                    cam.target_zoom =
+                        (old_scale * (1.0 + -scroll * 0.001 * zoom_multiplier)).max(cam.min_scale);
+                }
+
+                if let Some(mouse_normalized_screen_pos) = mouse_normalized_screen_pos {
+                    let proj_size = proj.area.max / old_scale;
+                    let mouse_world_pos = pos.translation.truncate()
+                        + mouse_normalized_screen_pos * proj_size * old_scale;
+
+                    cam.target_translation = Some(
+                        (mouse_world_pos
+                            - mouse_normalized_screen_pos * proj_size * cam.target_zoom)
+                            .extend(pos.translation.z),
+                    );
+                }
+
+                if let Some(mouse_normalized_screen_pos) = mouse_normalized_screen_pos {
+                    let proj_size = proj.area.max / old_scale;
+                    let mouse_world_pos_before = pos.translation.truncate()
+                        + mouse_normalized_screen_pos * proj_size * old_scale;
+                    let mouse_world_pos_after = pos.translation.truncate()
+                        + mouse_normalized_screen_pos * proj_size * cam.target_zoom;
+                    cam.delta_zoom_translation =
+                        Some((mouse_world_pos_before - mouse_world_pos_after).extend(0.0));
+                } else {
+                    cam.delta_zoom_translation = Some(Vec3::ZERO);
+                }
+
+                // set the zooming flag
+                cam.is_zooming = true;
+            }
         }
     }
 }
-
 /// max_scale_within_bounds is used to find the maximum safe zoom out/projection
 /// scale when we have been provided with minimum and maximum x boundaries for
 /// the camera.
@@ -351,6 +399,8 @@ pub struct PanCam {
     pub is_zooming: bool,
     pub target_translation: Option<Vec3>,
     pub delta_zoom_translation: Option<Vec3>,
+    pub first_zoom: bool,
+    pub initialized: bool,
 }
 
 impl Default for PanCam {
@@ -370,6 +420,8 @@ impl Default for PanCam {
             is_zooming: false,
             target_translation: None,
             delta_zoom_translation: None,
+            first_zoom: false,
+            initialized: false,
         }
     }
 }
