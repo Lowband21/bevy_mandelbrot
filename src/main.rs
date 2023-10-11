@@ -140,15 +140,16 @@ fn setup(
         enabled: true,
         zoom_to_cursor: true,
         min_scale: 0.0012,
-        max_scale: Some(10.),
+        max_scale: Some(100.),
         min_x: Some(-5000.0),
         min_y: Some(-5000.0),
         max_x: Some(5000.0),
         max_y: Some(5000.0),
-        current_zoom: 1.0,
-        target_zoom: 1.0,
+        current_zoom: 0.0,
+        target_zoom: 0.0,
         is_zooming: false,
         target_translation: None,
+        delta_zoom_translation: None,
     });
     //commands.spawn(Camera2dBundle::default());
 }

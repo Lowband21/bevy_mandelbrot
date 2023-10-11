@@ -130,13 +130,12 @@ fn apply_constraints_system(
 fn zoom_interpolation_system(
     mut query: Query<(&mut PanCam, &mut OrthographicProjection, &mut Transform)>,
     time: Res<Time>,
-    primary_window: Query<&Window, With<PrimaryWindow>>,
 ) {
     let interpolation_factor = 5.0 * time.delta_seconds();
 
     for (mut cam, mut proj, mut transform) in query.iter_mut() {
         if cam.is_zooming {
-            if (cam.target_zoom - proj.scale).abs() > 0.001 {
+            if (cam.target_zoom - proj.scale).abs() > 0.01 {
                 if let Some(target_translation) = cam.target_translation {
                     // Interpolate zoom
                     proj.scale += (cam.target_zoom - proj.scale) * interpolation_factor;
@@ -159,18 +158,20 @@ fn zoom_interpolation_system(
 }
 
 fn camera_zoom(
-    keyboard_input: Res<Input<KeyCode>>, // <-- Add this parameter
+    keyboard_input: Res<Input<KeyCode>>,
     mut query: Query<(&mut PanCam, &mut OrthographicProjection, &mut Transform)>,
     mut scroll_events: EventReader<MouseWheel>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let pixels_per_line = 50.; // Maybe make configurable?
-    let mut zoom_multiplier = 10.0; // Default zoom multiplier
+    let pixels_per_line = 100.;
+    let base_zoom_multiplier = 10.0;
 
     // Check if left shift is pressed
-    if keyboard_input.pressed(KeyCode::ShiftLeft) {
-        zoom_multiplier = 2.0; // Double the zoom speed when left shift is pressed
-    }
+    let shift_multiplier = if keyboard_input.pressed(KeyCode::ShiftLeft) {
+        1.0
+    } else {
+        3.0
+    };
 
     let scroll = scroll_events
         .iter()
@@ -178,8 +179,7 @@ fn camera_zoom(
             MouseScrollUnit::Pixel => ev.y,
             MouseScrollUnit::Line => ev.y * pixels_per_line,
         })
-        .sum::<f32>()
-        * zoom_multiplier; // <-- Multiply the scroll with the zoom_multiplier
+        .sum::<f32>();
 
     if scroll == 0. {
         return;
@@ -192,10 +192,17 @@ fn camera_zoom(
         .map(|cursor_pos| (cursor_pos / window_size) * 2. - Vec2::ONE)
         .map(|p| Vec2::new(p.x, -p.y));
 
-    for (mut cam, mut proj, mut pos) in &mut query {
+    for (mut cam, proj, pos) in &mut query {
         if cam.enabled {
+            // Compute dynamic zoom factor based on the current scale
+            let dynamic_zoom_factor = proj.scale.min(0.5);
+
+            // Adjust the zoom multiplier with the dynamic factor
+            let zoom_multiplier = base_zoom_multiplier * dynamic_zoom_factor * shift_multiplier;
+
             let old_scale = proj.scale;
-            cam.target_zoom = (old_scale * (1.0 + -scroll * 0.001)).max(cam.min_scale);
+            cam.target_zoom =
+                (old_scale * (1.0 + -scroll * 0.001 * zoom_multiplier)).max(cam.min_scale);
 
             if let Some(mouse_normalized_screen_pos) = mouse_normalized_screen_pos {
                 let proj_size = proj.area.max / old_scale;
@@ -208,82 +215,22 @@ fn camera_zoom(
                 );
             }
 
+            if let Some(mouse_normalized_screen_pos) = mouse_normalized_screen_pos {
+                let proj_size = proj.area.max / old_scale;
+                let mouse_world_pos_before = pos.translation.truncate()
+                    + mouse_normalized_screen_pos * proj_size * old_scale;
+                let mouse_world_pos_after = pos.translation.truncate()
+                    + mouse_normalized_screen_pos * proj_size * cam.target_zoom;
+                cam.delta_zoom_translation =
+                    Some((mouse_world_pos_before - mouse_world_pos_after).extend(0.0));
+            } else {
+                cam.delta_zoom_translation = Some(Vec3::ZERO);
+            }
+
             // set the zooming flag
             cam.is_zooming = true;
         }
     }
-
-    // Interpolate towards the target zoom
-    //proj.scale += (cam.target_zoom - proj.scale) * 0.1;
-
-    //// Apply constraints based on boundaries
-    //let scale_constrained = BVec2::new(
-    //    cam.min_x.is_some() && cam.max_x.is_some(),
-    //    cam.min_y.is_some() && cam.max_y.is_some(),
-    //);
-
-    //let bounds_size = vec2(
-    //    cam.max_x.unwrap_or(f32::INFINITY) - cam.min_x.unwrap_or(-f32::INFINITY),
-    //    cam.max_y.unwrap_or(f32::INFINITY) - cam.min_y.unwrap_or(-f32::INFINITY),
-    //);
-    //let max_safe_scale = max_scale_within_bounds(bounds_size, &proj, window_size);
-
-    //// Clamp to minimum scale
-    //proj.scale = proj.scale.max(cam.min_scale);
-
-    //// Apply max scale constraint based on both cam.max_scale and boundary constraints
-    //let max_scale = cam
-    //    .max_scale
-    //    .unwrap_or(f32::INFINITY)
-    //    .min(if scale_constrained.x {
-    //        max_safe_scale.x
-    //    } else {
-    //        f32::INFINITY
-    //    })
-    //    .min(if scale_constrained.y {
-    //        max_safe_scale.y
-    //    } else {
-    //        f32::INFINITY
-    //    });
-
-    //proj.scale = proj.scale.min(max_scale);
-
-    // Move the camera position to normalize the projection window
-    //if let (Some(mouse_normalized_screen_pos), true) =
-    //    (mouse_normalized_screen_pos, cam.zoom_to_cursor)
-    //{
-    //    let proj_size = proj.area.max / old_scale;
-    //    let mouse_world_pos = pos.translation.truncate()
-    //        + mouse_normalized_screen_pos * proj_size * old_scale;
-    //    pos.translation = (mouse_world_pos
-    //        - mouse_normalized_screen_pos * proj_size * proj.scale)
-    //        .extend(pos.translation.z);
-
-    //    // As we zoom out, we don't want the viewport to move beyond the provided boundary. If the most recent
-    //    // change to the camera zoom would move cause parts of the window beyond the boundary to be shown, we
-    //    // need to change the camera position to keep the viewport within bounds. The four if statements below
-    //    // provide this behavior for the min and max x and y boundaries.
-    //    let proj_size = proj.area.size();
-
-    //    let half_of_viewport = proj_size / 2.;
-
-    //    if let Some(min_x_bound) = cam.min_x {
-    //        let min_safe_cam_x = min_x_bound + half_of_viewport.x;
-    //        pos.translation.x = pos.translation.x.max(min_safe_cam_x);
-    //    }
-    //    if let Some(max_x_bound) = cam.max_x {
-    //        let max_safe_cam_x = max_x_bound - half_of_viewport.x;
-    //        pos.translation.x = pos.translation.x.min(max_safe_cam_x);
-    //    }
-    //    if let Some(min_y_bound) = cam.min_y {
-    //        let min_safe_cam_y = min_y_bound + half_of_viewport.y;
-    //        pos.translation.y = pos.translation.y.max(min_safe_cam_y);
-    //    }
-    //    if let Some(max_y_bound) = cam.max_y {
-    //        let max_safe_cam_y = max_y_bound - half_of_viewport.y;
-    //        pos.translation.y = pos.translation.y.min(max_safe_cam_y);
-    //    }
-    //}
 }
 
 /// max_scale_within_bounds is used to find the maximum safe zoom out/projection
@@ -319,37 +266,39 @@ fn camera_movement(
 
     for (cam, mut transform, projection) in &mut query {
         if cam.enabled
-        && !cam.is_zooming // Add this check
-        && cam.grab_buttons.iter().any(|btn| mouse_buttons.pressed(*btn))
+            && cam
+                .grab_buttons
+                .iter()
+                .any(|btn| mouse_buttons.pressed(*btn))
         {
             let proj_size = projection.area.size();
-
             let world_units_per_device_pixel = proj_size / window_size;
-
-            // The proposed new camera position
             let delta_world = delta_device_pixels * world_units_per_device_pixel;
-            let mut proposed_cam_transform = transform.translation - delta_world.extend(0.);
 
-            // Check whether the proposed camera movement would be within the provided boundaries, override it if we
-            // need to do so to stay within bounds.
+            if !cam.is_zooming {
+                // Handle panning
+                transform.translation -= delta_world.extend(0.0);
+            }
+
+            // Apply boundary constraints
+            let half_of_viewport = proj_size / 2.;
+
             if let Some(min_x_boundary) = cam.min_x {
-                let min_safe_cam_x = min_x_boundary + proj_size.x / 2.;
-                proposed_cam_transform.x = proposed_cam_transform.x.max(min_safe_cam_x);
+                let min_safe_cam_x = min_x_boundary + half_of_viewport.x;
+                transform.translation.x = transform.translation.x.max(min_safe_cam_x);
             }
             if let Some(max_x_boundary) = cam.max_x {
-                let max_safe_cam_x = max_x_boundary - proj_size.x / 2.;
-                proposed_cam_transform.x = proposed_cam_transform.x.min(max_safe_cam_x);
+                let max_safe_cam_x = max_x_boundary - half_of_viewport.x;
+                transform.translation.x = transform.translation.x.min(max_safe_cam_x);
             }
             if let Some(min_y_boundary) = cam.min_y {
-                let min_safe_cam_y = min_y_boundary + proj_size.y / 2.;
-                proposed_cam_transform.y = proposed_cam_transform.y.max(min_safe_cam_y);
+                let min_safe_cam_y = min_y_boundary + half_of_viewport.y;
+                transform.translation.y = transform.translation.y.max(min_safe_cam_y);
             }
             if let Some(max_y_boundary) = cam.max_y {
-                let max_safe_cam_y = max_y_boundary - proj_size.y / 2.;
-                proposed_cam_transform.y = proposed_cam_transform.y.min(max_safe_cam_y);
+                let max_safe_cam_y = max_y_boundary - half_of_viewport.y;
+                transform.translation.y = transform.translation.y.min(max_safe_cam_y);
             }
-
-            transform.translation = proposed_cam_transform;
         }
     }
     *last_pos = Some(current_pos);
@@ -401,6 +350,7 @@ pub struct PanCam {
     pub target_zoom: f32,
     pub is_zooming: bool,
     pub target_translation: Option<Vec3>,
+    pub delta_zoom_translation: Option<Vec3>,
 }
 
 impl Default for PanCam {
@@ -419,6 +369,7 @@ impl Default for PanCam {
             target_zoom: 1.0,
             is_zooming: false,
             target_translation: None,
+            delta_zoom_translation: None,
         }
     }
 }
