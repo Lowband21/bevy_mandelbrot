@@ -3,8 +3,6 @@ An immersive Bevy-powered application that lets you explore the beautiful intric
 
 ![screenshot 1](https://raw.githubusercontent.com/Lowband21/bevy_mandelbrot/master/screenshot_1.png)
 
-
-
 ## Table of Contents
 - Features
 - Installation
