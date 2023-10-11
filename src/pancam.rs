@@ -22,7 +22,13 @@ impl Plugin for PanCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (camera_movement, camera_zoom).in_set(PanCamSystemSet),
+            (
+                camera_movement.before(apply_constraints_system),
+                camera_zoom.before(apply_constraints_system),
+                zoom_interpolation_system.before(apply_constraints_system),
+                apply_constraints_system,
+            )
+                .in_set(PanCamSystemSet),
         )
         .register_type::<PanCam>();
 
@@ -58,18 +64,112 @@ fn check_egui_wants_focus(
     wants_focus.set_if_neq(EguiWantsFocus(new_wants_focus));
 }
 
+fn apply_constraints_system(
+    mut query: Query<(&PanCam, &mut OrthographicProjection, &mut Transform)>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
+) {
+    let window = primary_window.single();
+    let window_size = Vec2::new(window.width(), window.height());
+
+    for (cam, mut proj, mut pos) in query.iter_mut() {
+        let scale_constrained = BVec2::new(
+            cam.min_x.is_some() && cam.max_x.is_some(),
+            cam.min_y.is_some() && cam.max_y.is_some(),
+        );
+
+        let bounds_size = vec2(
+            cam.max_x.unwrap_or(f32::INFINITY) - cam.min_x.unwrap_or(-f32::INFINITY),
+            cam.max_y.unwrap_or(f32::INFINITY) - cam.min_y.unwrap_or(-f32::INFINITY),
+        );
+
+        let max_safe_scale = max_scale_within_bounds(bounds_size, &proj, window_size);
+
+        // Clamp to minimum scale
+        proj.scale = proj.scale.max(cam.min_scale);
+
+        // Apply max scale constraint based on both cam.max_scale and boundary constraints
+        let max_scale = cam
+            .max_scale
+            .unwrap_or(f32::INFINITY)
+            .min(if scale_constrained.x {
+                max_safe_scale.x
+            } else {
+                f32::INFINITY
+            })
+            .min(if scale_constrained.y {
+                max_safe_scale.y
+            } else {
+                f32::INFINITY
+            });
+
+        proj.scale = proj.scale.min(max_scale);
+
+        // Apply positional constraints (as previously detailed)
+        let proj_size = proj.area.size();
+        let half_of_viewport = proj_size / 2.;
+
+        if let Some(min_x_bound) = cam.min_x {
+            let min_safe_cam_x = min_x_bound + half_of_viewport.x;
+            pos.translation.x = pos.translation.x.max(min_safe_cam_x);
+        }
+        if let Some(max_x_bound) = cam.max_x {
+            let max_safe_cam_x = max_x_bound - half_of_viewport.x;
+            pos.translation.x = pos.translation.x.min(max_safe_cam_x);
+        }
+        if let Some(min_y_bound) = cam.min_y {
+            let min_safe_cam_y = min_y_bound + half_of_viewport.y;
+            pos.translation.y = pos.translation.y.max(min_safe_cam_y);
+        }
+        if let Some(max_y_bound) = cam.max_y {
+            let max_safe_cam_y = max_y_bound - half_of_viewport.y;
+            pos.translation.y = pos.translation.y.min(max_safe_cam_y);
+        }
+    }
+}
+
+fn zoom_interpolation_system(
+    mut query: Query<(&mut PanCam, &mut OrthographicProjection, &mut Transform)>,
+    time: Res<Time>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
+) {
+    let interpolation_factor = 5.0 * time.delta_seconds();
+
+    for (mut cam, mut proj, mut transform) in query.iter_mut() {
+        if cam.is_zooming {
+            if (cam.target_zoom - proj.scale).abs() > 0.001 {
+                if let Some(target_translation) = cam.target_translation {
+                    // Interpolate zoom
+                    proj.scale += (cam.target_zoom - proj.scale) * interpolation_factor;
+
+                    // Interpolate position
+                    transform.translation.x +=
+                        (target_translation.x - transform.translation.x) * interpolation_factor;
+                    transform.translation.y +=
+                        (target_translation.y - transform.translation.y) * interpolation_factor;
+                }
+            } else {
+                proj.scale = cam.target_zoom;
+                if let Some(target) = cam.target_translation {
+                    transform.translation = target;
+                }
+                cam.is_zooming = false;
+            }
+        }
+    }
+}
+
 fn camera_zoom(
     keyboard_input: Res<Input<KeyCode>>, // <-- Add this parameter
-    mut query: Query<(&PanCam, &mut OrthographicProjection, &mut Transform)>,
+    mut query: Query<(&mut PanCam, &mut OrthographicProjection, &mut Transform)>,
     mut scroll_events: EventReader<MouseWheel>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let pixels_per_line = 10.; // Maybe make configurable?
+    let pixels_per_line = 50.; // Maybe make configurable?
     let mut zoom_multiplier = 10.0; // Default zoom multiplier
 
     // Check if left shift is pressed
     if keyboard_input.pressed(KeyCode::ShiftLeft) {
-        zoom_multiplier = 1.0; // Double the zoom speed when left shift is pressed
+        zoom_multiplier = 2.0; // Double the zoom speed when left shift is pressed
     }
 
     let scroll = scroll_events
@@ -92,85 +192,98 @@ fn camera_zoom(
         .map(|cursor_pos| (cursor_pos / window_size) * 2. - Vec2::ONE)
         .map(|p| Vec2::new(p.x, -p.y));
 
-    for (cam, mut proj, mut pos) in &mut query {
+    for (mut cam, mut proj, mut pos) in &mut query {
         if cam.enabled {
             let old_scale = proj.scale;
-            proj.scale = (proj.scale * (1. + -scroll * 0.001)).max(cam.min_scale);
+            cam.target_zoom = (old_scale * (1.0 + -scroll * 0.001)).max(cam.min_scale);
 
-            // Apply max scale constraint
-            if let Some(max_scale) = cam.max_scale {
-                proj.scale = proj.scale.min(max_scale);
-            }
-
-            // If there is both a min and max boundary, that limits how far we can zoom. Make sure we don't exceed that
-            let scale_constrained = BVec2::new(
-                cam.min_x.is_some() && cam.max_x.is_some(),
-                cam.min_y.is_some() && cam.max_y.is_some(),
-            );
-
-            if scale_constrained.x || scale_constrained.y {
-                let bounds_width = if let (Some(min_x), Some(max_x)) = (cam.min_x, cam.max_x) {
-                    max_x - min_x
-                } else {
-                    f32::INFINITY
-                };
-
-                let bounds_height = if let (Some(min_y), Some(max_y)) = (cam.min_y, cam.max_y) {
-                    max_y - min_y
-                } else {
-                    f32::INFINITY
-                };
-
-                let bounds_size = vec2(bounds_width, bounds_height);
-                let max_safe_scale = max_scale_within_bounds(bounds_size, &proj, window_size);
-
-                if scale_constrained.x {
-                    proj.scale = proj.scale.min(max_safe_scale.x);
-                }
-
-                if scale_constrained.y {
-                    proj.scale = proj.scale.min(max_safe_scale.y);
-                }
-            }
-
-            // Move the camera position to normalize the projection window
-            if let (Some(mouse_normalized_screen_pos), true) =
-                (mouse_normalized_screen_pos, cam.zoom_to_cursor)
-            {
+            if let Some(mouse_normalized_screen_pos) = mouse_normalized_screen_pos {
                 let proj_size = proj.area.max / old_scale;
                 let mouse_world_pos = pos.translation.truncate()
                     + mouse_normalized_screen_pos * proj_size * old_scale;
-                pos.translation = (mouse_world_pos
-                    - mouse_normalized_screen_pos * proj_size * proj.scale)
-                    .extend(pos.translation.z);
 
-                // As we zoom out, we don't want the viewport to move beyond the provided boundary. If the most recent
-                // change to the camera zoom would move cause parts of the window beyond the boundary to be shown, we
-                // need to change the camera position to keep the viewport within bounds. The four if statements below
-                // provide this behavior for the min and max x and y boundaries.
-                let proj_size = proj.area.size();
-
-                let half_of_viewport = proj_size / 2.;
-
-                if let Some(min_x_bound) = cam.min_x {
-                    let min_safe_cam_x = min_x_bound + half_of_viewport.x;
-                    pos.translation.x = pos.translation.x.max(min_safe_cam_x);
-                }
-                if let Some(max_x_bound) = cam.max_x {
-                    let max_safe_cam_x = max_x_bound - half_of_viewport.x;
-                    pos.translation.x = pos.translation.x.min(max_safe_cam_x);
-                }
-                if let Some(min_y_bound) = cam.min_y {
-                    let min_safe_cam_y = min_y_bound + half_of_viewport.y;
-                    pos.translation.y = pos.translation.y.max(min_safe_cam_y);
-                }
-                if let Some(max_y_bound) = cam.max_y {
-                    let max_safe_cam_y = max_y_bound - half_of_viewport.y;
-                    pos.translation.y = pos.translation.y.min(max_safe_cam_y);
-                }
+                cam.target_translation = Some(
+                    (mouse_world_pos - mouse_normalized_screen_pos * proj_size * cam.target_zoom)
+                        .extend(pos.translation.z),
+                );
             }
+
+            // set the zooming flag
+            cam.is_zooming = true;
         }
     }
+
+    // Interpolate towards the target zoom
+    //proj.scale += (cam.target_zoom - proj.scale) * 0.1;
+
+    //// Apply constraints based on boundaries
+    //let scale_constrained = BVec2::new(
+    //    cam.min_x.is_some() && cam.max_x.is_some(),
+    //    cam.min_y.is_some() && cam.max_y.is_some(),
+    //);
+
+    //let bounds_size = vec2(
+    //    cam.max_x.unwrap_or(f32::INFINITY) - cam.min_x.unwrap_or(-f32::INFINITY),
+    //    cam.max_y.unwrap_or(f32::INFINITY) - cam.min_y.unwrap_or(-f32::INFINITY),
+    //);
+    //let max_safe_scale = max_scale_within_bounds(bounds_size, &proj, window_size);
+
+    //// Clamp to minimum scale
+    //proj.scale = proj.scale.max(cam.min_scale);
+
+    //// Apply max scale constraint based on both cam.max_scale and boundary constraints
+    //let max_scale = cam
+    //    .max_scale
+    //    .unwrap_or(f32::INFINITY)
+    //    .min(if scale_constrained.x {
+    //        max_safe_scale.x
+    //    } else {
+    //        f32::INFINITY
+    //    })
+    //    .min(if scale_constrained.y {
+    //        max_safe_scale.y
+    //    } else {
+    //        f32::INFINITY
+    //    });
+
+    //proj.scale = proj.scale.min(max_scale);
+
+    // Move the camera position to normalize the projection window
+    //if let (Some(mouse_normalized_screen_pos), true) =
+    //    (mouse_normalized_screen_pos, cam.zoom_to_cursor)
+    //{
+    //    let proj_size = proj.area.max / old_scale;
+    //    let mouse_world_pos = pos.translation.truncate()
+    //        + mouse_normalized_screen_pos * proj_size * old_scale;
+    //    pos.translation = (mouse_world_pos
+    //        - mouse_normalized_screen_pos * proj_size * proj.scale)
+    //        .extend(pos.translation.z);
+
+    //    // As we zoom out, we don't want the viewport to move beyond the provided boundary. If the most recent
+    //    // change to the camera zoom would move cause parts of the window beyond the boundary to be shown, we
+    //    // need to change the camera position to keep the viewport within bounds. The four if statements below
+    //    // provide this behavior for the min and max x and y boundaries.
+    //    let proj_size = proj.area.size();
+
+    //    let half_of_viewport = proj_size / 2.;
+
+    //    if let Some(min_x_bound) = cam.min_x {
+    //        let min_safe_cam_x = min_x_bound + half_of_viewport.x;
+    //        pos.translation.x = pos.translation.x.max(min_safe_cam_x);
+    //    }
+    //    if let Some(max_x_bound) = cam.max_x {
+    //        let max_safe_cam_x = max_x_bound - half_of_viewport.x;
+    //        pos.translation.x = pos.translation.x.min(max_safe_cam_x);
+    //    }
+    //    if let Some(min_y_bound) = cam.min_y {
+    //        let min_safe_cam_y = min_y_bound + half_of_viewport.y;
+    //        pos.translation.y = pos.translation.y.max(min_safe_cam_y);
+    //    }
+    //    if let Some(max_y_bound) = cam.max_y {
+    //        let max_safe_cam_y = max_y_bound - half_of_viewport.y;
+    //        pos.translation.y = pos.translation.y.min(max_safe_cam_y);
+    //    }
+    //}
 }
 
 /// max_scale_within_bounds is used to find the maximum safe zoom out/projection
@@ -206,10 +319,8 @@ fn camera_movement(
 
     for (cam, mut transform, projection) in &mut query {
         if cam.enabled
-            && cam
-                .grab_buttons
-                .iter()
-                .any(|btn| mouse_buttons.pressed(*btn))
+        && !cam.is_zooming // Add this check
+        && cam.grab_buttons.iter().any(|btn| mouse_buttons.pressed(*btn))
         {
             let proj_size = projection.area.size();
 
@@ -286,6 +397,10 @@ pub struct PanCam {
     /// If present, the orthographic projection will be clamped to this boundary both
     /// when dragging the window, and zooming out.
     pub max_y: Option<f32>,
+    pub current_zoom: f32,
+    pub target_zoom: f32,
+    pub is_zooming: bool,
+    pub target_translation: Option<Vec3>,
 }
 
 impl Default for PanCam {
@@ -300,6 +415,10 @@ impl Default for PanCam {
             max_x: None,
             min_y: None,
             max_y: None,
+            current_zoom: 1.0,
+            target_zoom: 1.0,
+            is_zooming: false,
+            target_translation: None,
         }
     }
 }
