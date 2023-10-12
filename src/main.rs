@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 // Local module import for custom camera controls.
 mod pancam;
-use crate::pancam::{PanCam, PanCamPlugin};
+use crate::pancam::{PanCamConfig, PanCamPlugin, PanCamState};
 
 // Additional imports from the `bevy` crate, useful for rendering and diagnostics.
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
@@ -133,21 +133,32 @@ fn setup(
     });
 
     // Add a camera with custom pan and zoom capabilities.
-    commands.spawn(Camera2dBundle::default()).insert(PanCam {
-        grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
-        enabled: true,
-        zoom_to_cursor: true,
-        min_scale: 0.0012,
-        max_scale: Some(7.5),
-        min_x: Some(-5000.0),
-        min_y: Some(-5000.0),
-        max_x: Some(5000.0),
-        max_y: Some(5000.0),
-        current_zoom: 1.0,
-        target_zoom: 7.0,
-        is_zooming: true,
-        target_translation: None,
-        delta_zoom_translation: None,
-        ..default()
-    });
+    commands.spawn((
+        Camera2dBundle::default(),
+        PanCamConfig {
+            grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
+            enabled: true,
+            zoom_to_cursor: true,
+            min_scale: 0.00012,
+            max_scale: Some(7.5),
+            min_x: Some(-5000.0),
+            min_y: Some(-5000.0),
+            max_x: Some(5000.0),
+            max_y: Some(5000.0),
+            pixels_per_line: 100.0,
+            base_zoom_multiplier: 10.0,
+            shift_multiplier_normal: 10.0,
+            shift_multiplier_shifted: 100.0,
+            animation_scale: 3.0,
+            ..default()
+        },
+        PanCamState {
+            current_zoom: 1.0,
+            target_zoom: 4.5,
+            is_zooming: true,
+            target_translation: None,
+            delta_zoom_translation: None,
+            ..default()
+        },
+    ));
 }

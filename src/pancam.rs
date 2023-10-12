@@ -10,7 +10,7 @@ use bevy::{
     window::PrimaryWindow,
 };
 
-/// Plugin that adds the necessary systems for `PanCam` components to work
+/// Plugin that adds the necessary systems for `PanCamConfig` and `PanCamState` components to work
 #[derive(Default)]
 pub struct PanCamPlugin;
 
@@ -32,7 +32,8 @@ impl Plugin for PanCamPlugin {
             )
                 .in_set(PanCamSystemSet),
         )
-        .register_type::<PanCam>();
+        .register_type::<PanCamConfig>()
+        .register_type::<PanCamState>();
 
         {
             app.init_resource::<EguiWantsFocus>()
@@ -65,30 +66,35 @@ fn check_egui_wants_focus(
 
 // System that applies constraints on the camera's position and zoom based on defined bounds.
 fn apply_constraints_system(
-    mut query: Query<(&PanCam, &mut OrthographicProjection, &mut Transform)>,
+    mut query: Query<(
+        &PanCamConfig,
+        &mut PanCamState,
+        &mut OrthographicProjection,
+        &mut Transform,
+    )>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
 ) {
     let window = primary_window.single();
     let window_size = Vec2::new(window.width(), window.height());
 
-    for (cam, mut proj, mut pos) in query.iter_mut() {
+    for (cam_conf, cam, mut proj, mut pos) in query.iter_mut() {
         let scale_constrained = BVec2::new(
-            cam.min_x.is_some() && cam.max_x.is_some(),
-            cam.min_y.is_some() && cam.max_y.is_some(),
+            cam_conf.min_x.is_some() && cam_conf.max_x.is_some(),
+            cam_conf.min_y.is_some() && cam_conf.max_y.is_some(),
         );
 
         let bounds_size = vec2(
-            cam.max_x.unwrap_or(f32::INFINITY) - cam.min_x.unwrap_or(-f32::INFINITY),
-            cam.max_y.unwrap_or(f32::INFINITY) - cam.min_y.unwrap_or(-f32::INFINITY),
+            cam_conf.max_x.unwrap_or(f32::INFINITY) - cam_conf.min_x.unwrap_or(-f32::INFINITY),
+            cam_conf.max_y.unwrap_or(f32::INFINITY) - cam_conf.min_y.unwrap_or(-f32::INFINITY),
         );
 
         let max_safe_scale = max_scale_within_bounds(bounds_size, &proj, window_size);
 
         // Clamp to minimum scale
-        proj.scale = proj.scale.max(cam.min_scale);
+        proj.scale = proj.scale.max(cam_conf.min_scale);
 
         // Apply max scale constraint based on both cam.max_scale and boundary constraints
-        let max_scale = cam
+        let max_scale = cam_conf
             .max_scale
             .unwrap_or(f32::INFINITY)
             .min(if scale_constrained.x {
@@ -108,19 +114,19 @@ fn apply_constraints_system(
         let proj_size = proj.area.size();
         let half_of_viewport = proj_size / 2.;
 
-        if let Some(min_x_bound) = cam.min_x {
+        if let Some(min_x_bound) = cam_conf.min_x {
             let min_safe_cam_x = min_x_bound + half_of_viewport.x;
             pos.translation.x = pos.translation.x.max(min_safe_cam_x);
         }
-        if let Some(max_x_bound) = cam.max_x {
+        if let Some(max_x_bound) = cam_conf.max_x {
             let max_safe_cam_x = max_x_bound - half_of_viewport.x;
             pos.translation.x = pos.translation.x.min(max_safe_cam_x);
         }
-        if let Some(min_y_bound) = cam.min_y {
+        if let Some(min_y_bound) = cam_conf.min_y {
             let min_safe_cam_y = min_y_bound + half_of_viewport.y;
             pos.translation.y = pos.translation.y.max(min_safe_cam_y);
         }
-        if let Some(max_y_bound) = cam.max_y {
+        if let Some(max_y_bound) = cam_conf.max_y {
             let max_safe_cam_y = max_y_bound - half_of_viewport.y;
             pos.translation.y = pos.translation.y.min(max_safe_cam_y);
         }
@@ -129,14 +135,29 @@ fn apply_constraints_system(
 
 // Interpolation system for smooth camera zoom transitions.
 fn zoom_interpolation_system(
-    mut query: Query<(&mut PanCam, &mut OrthographicProjection, &mut Transform)>,
+    mut query: Query<(
+        &mut PanCamConfig,
+        &mut PanCamState,
+        &mut OrthographicProjection,
+        &mut Transform,
+    )>,
     time: Res<Time>,
 ) {
-    let interpolation_factor = 5.0 * time.delta_seconds();
-
-    for (mut cam, mut proj, mut transform) in query.iter_mut() {
+    for (mut cam_conf, mut cam, mut proj, mut transform) in query.iter_mut() {
+        let interpolation_factor = cam_conf.animation_scale * time.delta_seconds();
         if cam.is_zooming {
             let zoom_difference = cam.target_zoom - proj.scale;
+
+            // Reset zooming flag if close to target values
+            if zoom_difference.abs() <= 0.1
+                && (cam.target_translation.is_none()
+                    || (cam.target_translation.unwrap() - transform.translation).length() <= 0.01)
+            {
+                cam.is_zooming = false;
+            }
+            if zoom_difference.abs() <= 0.1 {
+                cam.first_zoom = false;
+            }
 
             // Scaling interpolation
             let zoom_step = zoom_difference * interpolation_factor;
@@ -170,15 +191,6 @@ fn zoom_interpolation_system(
                     transform.translation.y = target_translation.y;
                 }
             }
-
-            // Reset zooming flag if close to target values
-            if zoom_difference.abs() <= 0.1
-                && (cam.target_translation.is_none()
-                    || (cam.target_translation.unwrap() - transform.translation).length() <= 0.01)
-            {
-                cam.is_zooming = false;
-                cam.first_zoom = false;
-            }
         }
     }
 }
@@ -186,28 +198,15 @@ fn zoom_interpolation_system(
 // Handle camera zooming based on mouse wheel events and target zoom levels.
 fn camera_zoom(
     keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<(&mut PanCam, &mut OrthographicProjection, &mut Transform)>,
+    mut query: Query<(
+        &PanCamConfig,
+        &mut PanCamState,
+        &mut OrthographicProjection,
+        &mut Transform,
+    )>,
     mut scroll_events: EventReader<MouseWheel>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let pixels_per_line = 100.;
-    let base_zoom_multiplier = 10.0;
-
-    // Check if left shift is pressed
-    let shift_multiplier = if keyboard_input.pressed(KeyCode::ShiftLeft) {
-        15.0
-    } else {
-        3.0
-    };
-
-    let mut scroll = scroll_events
-        .iter()
-        .map(|ev| match ev.unit {
-            MouseScrollUnit::Pixel => ev.y,
-            MouseScrollUnit::Line => ev.y * pixels_per_line,
-        })
-        .sum::<f32>();
-
     let window = primary_window.single();
     let window_size = Vec2::new(window.width(), window.height());
     let mouse_normalized_screen_pos = window
@@ -215,9 +214,27 @@ fn camera_zoom(
         .map(|cursor_pos| (cursor_pos / window_size) * 2. - Vec2::ONE)
         .map(|p| Vec2::new(p.x, -p.y));
 
-    for (mut cam, mut proj, pos) in &mut query {
-        println!("Current scale: {:?}", proj.scale);
-        println!("Target scale: {:?}", cam.target_zoom);
+    for (cam_conf, mut cam, mut proj, pos) in &mut query {
+        let pixels_per_line = cam_conf.pixels_per_line;
+        let base_zoom_multiplier = cam_conf.base_zoom_multiplier;
+
+        // Check if left shift is pressed
+        let shift_multiplier = if keyboard_input.pressed(KeyCode::ShiftLeft) {
+            cam_conf.shift_multiplier_shifted
+        } else {
+            cam_conf.shift_multiplier_normal
+        };
+
+        let mut scroll = scroll_events
+            .iter()
+            .map(|ev| match ev.unit {
+                MouseScrollUnit::Pixel => ev.y,
+                MouseScrollUnit::Line => ev.y * pixels_per_line,
+            })
+            .sum::<f32>();
+
+        //println!("Current scale: {:?}", proj.scale);
+        //println!("Target scale: {:?}", cam.target_zoom);
         if scroll == 0.0
             && cam.first_zoom
             && (proj.scale.signum() < cam.target_zoom.signum()
@@ -231,24 +248,27 @@ fn camera_zoom(
         }
         if !cam.initialized && !cam.first_zoom {
             proj.scale = cam.current_zoom;
-            scroll = 1.0; // adjust this value to your desired initial zoom factor
+            scroll = 10.0; // adjust this value to your desired initial zoom factor
             cam.first_zoom = true;
             cam.is_zooming = true; // Ensure the camera starts zooming on initialization
             cam.initialized = true;
         }
 
         if scroll != 0.0 || cam.is_zooming {
-            if cam.enabled {
+            if cam_conf.enabled {
                 // Compute dynamic zoom factor based on the current scale
-                let dynamic_zoom_factor = proj.scale.min(0.5);
+                let dynamic_zoom_factor = proj.scale.clamp(0.5, 1.0);
 
                 // Adjust the zoom multiplier with the dynamic factor
                 let zoom_multiplier = base_zoom_multiplier * dynamic_zoom_factor * shift_multiplier;
 
+                println!("Scroll: {}", scroll);
+                println!("Zoom Multiplier: {}", zoom_multiplier);
+                println!("Dynamic Zoom Factor: {}", dynamic_zoom_factor);
+
                 let old_scale = proj.scale;
                 if !cam.first_zoom {
-                    cam.target_zoom =
-                        (old_scale * (1.0 + -scroll * 0.001 * zoom_multiplier)).max(cam.min_scale);
+                    cam.target_zoom = (old_scale * (1.0 + (-scroll * 0.001 * zoom_multiplier)));
                 }
 
                 if let Some(mouse_normalized_screen_pos) = mouse_normalized_screen_pos {
@@ -300,7 +320,12 @@ fn max_scale_within_bounds(
 fn camera_movement(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mouse_buttons: Res<Input<MouseButton>>,
-    mut query: Query<(&PanCam, &mut Transform, &OrthographicProjection)>,
+    mut query: Query<(
+        &PanCamConfig,
+        &mut PanCamState,
+        &mut Transform,
+        &OrthographicProjection,
+    )>,
     mut last_pos: Local<Option<Vec2>>,
 ) {
     let window = primary_window.single();
@@ -313,9 +338,9 @@ fn camera_movement(
     };
     let delta_device_pixels = current_pos - last_pos.unwrap_or(current_pos);
 
-    for (cam, mut transform, projection) in &mut query {
-        if cam.enabled
-            && cam
+    for (cam_conf, cam, mut transform, projection) in &mut query {
+        if cam_conf.enabled
+            && cam_conf
                 .grab_buttons
                 .iter()
                 .any(|btn| mouse_buttons.pressed(*btn))
@@ -332,19 +357,19 @@ fn camera_movement(
             // Apply boundary constraints
             let half_of_viewport = proj_size / 2.;
 
-            if let Some(min_x_boundary) = cam.min_x {
+            if let Some(min_x_boundary) = cam_conf.min_x {
                 let min_safe_cam_x = min_x_boundary + half_of_viewport.x;
                 transform.translation.x = transform.translation.x.max(min_safe_cam_x);
             }
-            if let Some(max_x_boundary) = cam.max_x {
+            if let Some(max_x_boundary) = cam_conf.max_x {
                 let max_safe_cam_x = max_x_boundary - half_of_viewport.x;
                 transform.translation.x = transform.translation.x.min(max_safe_cam_x);
             }
-            if let Some(min_y_boundary) = cam.min_y {
+            if let Some(min_y_boundary) = cam_conf.min_y {
                 let min_safe_cam_y = min_y_boundary + half_of_viewport.y;
                 transform.translation.y = transform.translation.y.max(min_safe_cam_y);
             }
-            if let Some(max_y_boundary) = cam.max_y {
+            if let Some(max_y_boundary) = cam_conf.max_y {
                 let max_safe_cam_y = max_y_boundary - half_of_viewport.y;
                 transform.translation.y = transform.translation.y.min(max_safe_cam_y);
             }
@@ -353,59 +378,27 @@ fn camera_movement(
     *last_pos = Some(current_pos);
 }
 
-/// A component that adds panning camera controls to an orthographic camera
+/// A component for user-facing configurations of panning camera controls.
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-pub struct PanCam {
-    /// The mouse buttons that will be used to drag and pan the camera
+pub struct PanCamConfig {
     pub grab_buttons: Vec<MouseButton>,
-    /// Whether camera currently responds to user input
     pub enabled: bool,
-    /// When true, zooming the camera will center on the mouse cursor
-    ///
-    /// When false, the camera will stay in place, zooming towards the
-    /// middle of the screen
     pub zoom_to_cursor: bool,
-    /// The minimum scale for the camera
-    ///
-    /// The orthographic projection's scale will be clamped at this value when zooming in
     pub min_scale: f32,
-    /// The maximum scale for the camera
-    ///
-    /// If present, the orthographic projection's scale will be clamped at
-    /// this value when zooming out.
     pub max_scale: Option<f32>,
-    /// The minimum x position of the camera window
-    ///
-    /// If present, the orthographic projection will be clamped to this boundary both
-    /// when dragging the window, and zooming out.
     pub min_x: Option<f32>,
-    /// The maximum x position of the camera window
-    ///
-    /// If present, the orthographic projection will be clamped to this boundary both
-    /// when dragging the window, and zooming out.
     pub max_x: Option<f32>,
-    /// The minimum y position of the camera window
-    ///
-    /// If present, the orthographic projection will be clamped to this boundary both
-    /// when dragging the window, and zooming out.
     pub min_y: Option<f32>,
-    /// The maximum y position of the camera window
-    ///
-    /// If present, the orthographic projection will be clamped to this boundary both
-    /// when dragging the window, and zooming out.
     pub max_y: Option<f32>,
-    pub current_zoom: f32,
-    pub target_zoom: f32,
-    pub is_zooming: bool,
-    pub target_translation: Option<Vec3>,
-    pub delta_zoom_translation: Option<Vec3>,
-    pub first_zoom: bool,
-    pub initialized: bool,
+    pub pixels_per_line: f32,
+    pub base_zoom_multiplier: f32,
+    pub shift_multiplier_normal: f32,
+    pub shift_multiplier_shifted: f32,
+    pub animation_scale: f32,
 }
 
-impl Default for PanCam {
-    // Default values for the PanCam component.
+impl Default for PanCamConfig {
     fn default() -> Self {
         Self {
             grab_buttons: vec![MouseButton::Left, MouseButton::Right, MouseButton::Middle],
@@ -417,6 +410,31 @@ impl Default for PanCam {
             max_x: None,
             min_y: None,
             max_y: None,
+            pixels_per_line: 100.0,
+            base_zoom_multiplier: 10.0,
+            shift_multiplier_normal: 10.0,
+            shift_multiplier_shifted: 30.0,
+            animation_scale: 3.0,
+        }
+    }
+}
+
+/// A component for internal state variables of panning camera controls.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct PanCamState {
+    pub current_zoom: f32,
+    pub target_zoom: f32,
+    pub is_zooming: bool,
+    pub target_translation: Option<Vec3>,
+    pub delta_zoom_translation: Option<Vec3>,
+    pub first_zoom: bool,
+    pub initialized: bool,
+}
+
+impl Default for PanCamState {
+    fn default() -> Self {
+        Self {
             current_zoom: 1.0,
             target_zoom: 1.0,
             is_zooming: false,
