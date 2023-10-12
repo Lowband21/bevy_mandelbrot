@@ -2,6 +2,7 @@
 An immersive Bevy-powered application that lets you explore the beautiful intricacies of the Mandelbrot fractal. Dive deep into the fractal's infinite intricacies, panning and zooming to witness the awe-inspiring patterns that emerge.
 
 ![screenshot 1](https://raw.githubusercontent.com/Lowband21/bevy_mandelbrot/master/screenshot_1.png)
+![screenshot 2](https://raw.githubusercontent.com/Lowband21/bevy_mandelbrot/master/screenshot_2.png)
 
 ## Table of Contents
 - Features
@@ -40,14 +41,12 @@ cargo run --release
 
 Once you've launched the Mandelbrot Fractal Viewer, you'll be presented with the fractal's visualization. Use the provided controls to navigate and explore!
 ## Controls
-
     Pan: Click and drag using the left or middle mouse button.
-    Zoom: Scroll up to zoom in, and scroll down to zoom out.
+    Zoom: Scroll up to zoom in, and scroll down to zoom out, hold shift to zoom faster.
     Inspector: Press Escape to toggle the WorldInspectorPlugin.
 
 ## Acknowledgements
-
 Huge thanks to the bevy_pancam crate for providing the foundational camera controls. The PanCam functionality in this application has been inspired by and adapted from their work.
-License
 
+## License
 This project is under the MIT License. See the LICENSE file for more details.
