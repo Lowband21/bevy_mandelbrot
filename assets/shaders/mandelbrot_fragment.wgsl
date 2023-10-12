@@ -25,7 +25,7 @@ fn fragment(
     var c: vec2<f32> = uv * 4.0 - 2.0;
     var z: vec2<f32> = vec2<f32>(0.0, 0.0);
     var iteration: f32 = 0.0;
-    let max_iterations: f32 = 1000.0 * (1.0 + 10.0 / mandelbrotMaterial.color_scale);
+    let max_iterations: f32 = 10000.0;
 
     // Check for early exit
     let q: f32 = (c.x - 0.25) * (c.x - 0.25) + c.y * c.y;
