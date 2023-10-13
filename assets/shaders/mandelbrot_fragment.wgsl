@@ -47,7 +47,7 @@ fn fragment(
     }
 
     // Convert iteration count to color
-    let basic_color: f32 = f32(iteration) / f32(max_iterations);
+    let basic_color = log(iteration + 1.0) / log(max_iterations + 1.0);
     let adjusted_color = pow(basic_color, 0.3);
     let color = adjusted_color * (1.0 - mandelbrotMaterial.color_scale) + mandelbrotMaterial.color_scale;
 
