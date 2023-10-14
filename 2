@@ -257,7 +257,7 @@ fn camera_zoom(
         if scroll != 0.0 || cam.is_zooming {
             if cam_conf.enabled {
                 // Compute dynamic zoom factor based on the current scale
-                let dynamic_zoom_factor = proj.scale.clamp(0.7, 1.0);
+                let dynamic_zoom_factor = proj.scale.clamp(0.0, 5.0);
 
                 // Adjust the zoom multiplier with the dynamic factor
                 let zoom_multiplier = base_zoom_multiplier * dynamic_zoom_factor * shift_multiplier;
