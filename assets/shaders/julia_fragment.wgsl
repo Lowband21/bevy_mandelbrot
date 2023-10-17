@@ -8,8 +8,6 @@ var colormap_sampler: sampler;
 struct JuliaMaterial {
     color_scale: f32,
     max_iterations: u32,
-    zoom: f32,
-    offset: vec2<f32>,
     c: vec2<f32>,  // New constant for the Julia set
 };
 
@@ -32,7 +30,7 @@ fn fragment(
         let y: f32 = (2.0 * z.x * z.y) + juliaMaterial.c.y;
         if (abs(x) > 2.0 || abs(y) > 2.0) {
             // Modify iteration based on the distance from the origin
-            iteration += (1.0 - length(z) / 2.0) * 20.0; // 20.0 is an arbitrary factor to control gradient strength
+            //iteration += (1.0 - length(z) / 2.0) * 20.0; // 20.0 is an arbitrary factor to control gradient strength
             break;
         }
         z.x = x;
@@ -46,6 +44,6 @@ fn fragment(
     let color = adjusted_color * (1.0 - juliaMaterial.color_scale) + juliaMaterial.color_scale;
 
     // Sample from the colormap texture
-    let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(color, 0.5));
+    let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(basic_color, 0.5));
     return colormap_color;
 }
