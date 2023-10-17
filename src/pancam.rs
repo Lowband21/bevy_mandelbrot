@@ -261,9 +261,6 @@ fn camera_zoom(
                 // Adjust the zoom multiplier with the dynamic factor
                 let zoom_multiplier = base_zoom_multiplier * shift_multiplier;
 
-                println!("Scroll: {}", scroll);
-                println!("Zoom Multiplier: {}", zoom_multiplier);
-
                 let old_scale = proj.scale;
                 if !cam.first_zoom {
                     cam.target_zoom = old_scale * (1.0 + (-scroll * 0.001 * zoom_multiplier));

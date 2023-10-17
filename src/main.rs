@@ -18,6 +18,7 @@ use bevy::render::render_resource::{AsBindGroup, ShaderRef};
 use bevy::sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
+
 // The main function to initialize and run the Bevy app.
 fn main() {
     // Initializing the Bevy app and adding various plugins.
@@ -27,6 +28,7 @@ fn main() {
         .init_resource::<FractalType>()
         .init_resource::<MandelbrotEntity>()
         .init_resource::<JuliaEntity>()
+        .init_resource::<MandelbrotUpdateToggle>()
         .add_plugins(DefaultPlugins)
         .add_plugins(
             // Add an inspector that can be toggled using the Escape key.
@@ -38,7 +40,7 @@ fn main() {
         .add_systems(Startup, setup) // Setup function called at startup.
         .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default()) // Plugin for 2D materials.
         .add_plugins(Material2dPlugin::<JuliaMaterial>::default()) // Plugin for 2D materials.
-        //.add_systems(Update, mandelbrot_uniform_update_system) // Update system for Mandelbrot material.
+        .add_systems(Update, (mandelbrot_uniform_update_system, mandelbrot_toggle_system)) // Update system for Mandelbrot material.
         .add_systems(Update, fractal_toggle_system) // Update system for Mandelbrot material.
         .add_systems(Update, fractal_update_system)
         .run();
@@ -68,17 +70,27 @@ enum FractalType {
     Julia,
 }
 
+
 impl Default for FractalType {
     fn default() -> Self {
         FractalType::Mandelbrot
     }
 }
 
+#[derive(Resource)]
+struct MandelbrotUpdateToggle {
+    active: bool,
+}
+
+impl Default for MandelbrotUpdateToggle {
+    fn default() -> Self {
+        MandelbrotUpdateToggle { active: true }
+    }
+}
+
 // Struct to store uniform parameters for the Mandelbrot fractal.
 struct MandelbrotUniforms {
     color_scale: f32,
-    offset: Vec2,
-    zoom: f32,
     max_iterations: f32,
 }
 
@@ -88,12 +100,8 @@ struct MandelbrotUniforms {
 struct MandelbrotMaterial {
     #[uniform(0)]
     color_scale: f32,
-    #[uniform(0)]
-    max_iterations: u32,
-    #[uniform(0)]
-    offset: Vec2,
-    #[uniform(0)]
-    zoom: f32,
+    #[uniform(1)]
+    max_iterations: f32,
     #[texture(4)]
     #[sampler(5)]
     colormap_texture: Handle<Image>,
@@ -105,9 +113,9 @@ struct MandelbrotMaterial {
 struct JuliaMaterial {
     #[uniform(0)]
     color_scale: f32,
-    #[uniform(0)]
-    max_iterations: u32,
-    #[uniform(0)]
+    #[uniform(1)]
+    max_iterations: f32,
+    #[uniform(2)]
     c: Vec2, // Julia constant
     #[texture(4)]
     #[sampler(5)]
@@ -125,14 +133,37 @@ impl Material2d for JuliaMaterial {
     }
 }
 
+fn mandelbrot_toggle_system(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut toggle: ResMut<MandelbrotUpdateToggle>,
+) {
+    if keyboard_input.just_pressed(KeyCode::A) {  // You can choose another key if needed
+        toggle.active = !toggle.active;
+    }
+}
+
 // System to update the Mandelbrot material's color_scale based on time.
 fn mandelbrot_uniform_update_system(
     time: Res<Time>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
+    mut julia_materials: ResMut<Assets<JuliaMaterial>>,  // For Julia material
+    toggle: Res<MandelbrotUpdateToggle>,
 ) {
-    for (_, mut material) in materials.iter_mut() {
-        material.color_scale = 0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.5).sin());
+    if !toggle.active {
+        return;
     }
+    for (_, mut material) in materials.iter_mut() {
+        material.color_scale = (0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.01).sin())).min(0.8).max(0.2);
+    }
+    for (_, mut material) in julia_materials.iter_mut() {
+        // Different frequencies and phase shifts for x and y components
+        material.color_scale = (0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.01).sin())).min(0.8).max(0.2);
+        material.c.y = 0.8 * 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
+        material.c.x = 0.2 * 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
+        
+        println!("X: {}, Y: {}", material.c.x, material.c.y);
+    }
+    
 }
 
 use bevy::ecs::entity::Entities;
@@ -150,56 +181,56 @@ fn fractal_update_system(
     mut julia_entity: ResMut<JuliaEntity>,
 ) {
     if fractal_type.is_changed() {
-    let colormap_texture_handle = asset_server.load("gradient.png");
-    let uniforms = MandelbrotUniforms {
-        color_scale: 0.5,
-        offset: Vec2::new(5.0, 0.0),
-        zoom: 1.00,
-        max_iterations: 1000.0,
-    };
-    let mesh = Mesh::from(shape::Quad {
-        size: Vec2::new(10000.0, 10000.0),
-        flip: false,
-    });
-    let mandelbrot_mesh: Mesh2dHandle = Mesh2dHandle(meshes.add(mesh.clone()));
+        println!("Fractal Type Changed");
+        let colormap_texture_handle = asset_server.load("gradient.png");
+        // Define uniform values for the Mandelbrot material.
+        let uniforms = MandelbrotUniforms {
+            color_scale: 0.5,
+            max_iterations: 5000.0,
+        };
+        let mesh = Mesh::from(shape::Quad {
+            size: Vec2::new(10000.0, 10000.0),
+            flip: false,
+        });
+        let mandelbrot_mesh: Mesh2dHandle = Mesh2dHandle(meshes.add(mesh.clone()));
 
-    match *fractal_type {
-        FractalType::Mandelbrot => {
-            if let Some(entity) = julia_entity.0 {
-                if entities.contains(entity) {
-                    commands.entity(entity).despawn();
+        match *fractal_type {
+            FractalType::Mandelbrot => {
+                if let Some(entity) = julia_entity.0 {
+                    if entities.contains(entity) {
+                        commands.entity(entity).despawn();
+                    }
                 }
-            }
 
-            // Spawn Mandelbrot entity
-            let mandelbrot_material_handle =
-                prepare_mandelbrot_material(&uniforms, colormap_texture_handle.clone(), &mut materials);
-            mandelbrot_entity.0 = Some(commands.spawn(MaterialMesh2dBundle {
-                mesh: mandelbrot_mesh.clone(),
-                material: mandelbrot_material_handle,
-                transform: Transform::from_xyz(0.0, 0.5, 0.0),
-                ..Default::default()
-            }).id());
-        },
-        FractalType::Julia => {
-            if let Some(entity) = mandelbrot_entity.0 {
-                if entities.contains(entity) {
-                    commands.entity(entity).despawn();
+                // Spawn Mandelbrot entity
+                let mandelbrot_material_handle =
+                    prepare_mandelbrot_material(&uniforms, colormap_texture_handle.clone(), &mut materials);
+                mandelbrot_entity.0 = Some(commands.spawn(MaterialMesh2dBundle {
+                    mesh: mandelbrot_mesh.clone(),
+                    material: mandelbrot_material_handle,
+                    transform: Transform::from_xyz(0.0, 0.5, 0.0),
+                    ..Default::default()
+                }).id());
+            },
+            FractalType::Julia => {
+                if let Some(entity) = mandelbrot_entity.0 {
+                    if entities.contains(entity) {
+                        commands.entity(entity).despawn();
+                    }
                 }
+
+                // Spawn Julia entity
+                let julia_material_handle =
+                    prepare_julia_material(&uniforms, colormap_texture_handle, &mut julia_materials);
+                julia_entity.0 = Some(commands.spawn(MaterialMesh2dBundle {
+                    mesh: mandelbrot_mesh.clone(),
+                    material: julia_material_handle,
+                    transform: Transform::from_xyz(0.0, 0.5, 0.0),
+                    ..Default::default()
+                }).id());
+
             }
-
-            // Spawn Julia entity
-            let julia_material_handle =
-                prepare_julia_material(&uniforms, colormap_texture_handle, &mut julia_materials);
-            julia_entity.0 = Some(commands.spawn(MaterialMesh2dBundle {
-                mesh: mandelbrot_mesh.clone(),
-                material: julia_material_handle,
-                transform: Transform::from_xyz(0.0, 0.5, 0.0),
-                ..Default::default()
-            }).id());
-
         }
-    }
 
     }
 }
@@ -232,10 +263,8 @@ fn prepare_mandelbrot_material(
     materials: &mut ResMut<Assets<MandelbrotMaterial>>,
 ) -> Handle<MandelbrotMaterial> {
     let material = MandelbrotMaterial {
-        max_iterations: uniforms.max_iterations as u32,
+        max_iterations: uniforms.max_iterations,
         color_scale: uniforms.color_scale,
-        offset: uniforms.offset,
-        zoom: uniforms.zoom,
         colormap_texture: colormap_texture_handle,
     };
     materials.add(material)
@@ -248,7 +277,7 @@ fn prepare_julia_material(
 ) -> Handle<JuliaMaterial> {
     let material = JuliaMaterial {
         color_scale: uniforms.color_scale,
-        max_iterations: uniforms.max_iterations as u32,
+        max_iterations: uniforms.max_iterations,
         c: Vec2 { x: 0.3, y: 0.8 },
         colormap_texture: colormap_texture_handle,
     };
@@ -271,9 +300,7 @@ fn setup(
     // Define uniform values for the Mandelbrot material.
     let uniforms = MandelbrotUniforms {
         color_scale: 0.5,
-        offset: Vec2::new(5.0, 0.0),
-        zoom: 1.00,
-        max_iterations: 1000.0,
+        max_iterations: 5000.0,
     };
 
     // Create and store Mandelbrot material.
