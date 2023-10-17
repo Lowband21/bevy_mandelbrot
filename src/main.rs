@@ -24,6 +24,7 @@ fn main() {
     let _app = App::new()
         // Uncomment to set a custom clear color for the renderer.
         //.insert_resource(ClearColor(Color::hex("071f3c").unwrap()))
+        .init_resource::<FractalType>()
         .add_plugins(DefaultPlugins)
         .add_plugins(
             // Add an inspector that can be toggled using the Escape key.
@@ -34,8 +35,25 @@ fn main() {
         .add_plugins(FrameTimeDiagnosticsPlugin::default()) // Diagnostics for frame time.
         .add_systems(Startup, setup) // Setup function called at startup.
         .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default()) // Plugin for 2D materials.
-        .add_systems(Update, mandelbrot_uniform_update_system) // Update system for Mandelbrot material.
+        .add_plugins(Material2dPlugin::<JuliaMaterial>::default()) // Plugin for 2D materials.
+        //.add_systems(Update, mandelbrot_uniform_update_system) // Update system for Mandelbrot material.
+        .add_systems(Update, fractal_toggle_system) // Update system for Mandelbrot material.
+        .add_systems(Update, fractal_update_system)
         .run();
+}
+
+
+// New component to determine the current fractal type
+#[derive(Resource)]
+enum FractalType {
+    Mandelbrot,
+    Julia,
+}
+
+impl Default for FractalType {
+    fn default() -> Self {
+        FractalType::Mandelbrot
+    }
 }
 
 // Struct to store uniform parameters for the Mandelbrot fractal.
@@ -47,7 +65,7 @@ struct MandelbrotUniforms {
 }
 
 // Mandelbrot material definition. It holds parameters and texture for the Mandelbrot fractal.
-#[derive(Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
+#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
 #[uuid = "148ef22b-c53e-4bc2-982c-bb2b102e38f8"]
 struct MandelbrotMaterial {
     #[uniform(0)]
@@ -63,9 +81,33 @@ struct MandelbrotMaterial {
     colormap_texture: Handle<Image>,
 }
 
+// Julia material definition. It holds parameters and texture for the Julia fractal.
+#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
+#[uuid = "258ef34b-d54f-4bc3-993b-bc3e203a48f9"]
+struct JuliaMaterial {
+    #[uniform(0)]
+    color_scale: f32,
+    #[uniform(0)]
+    max_iterations: u32,
+    #[uniform(0)]
+    offset: Vec2,
+    #[uniform(0)]
+    zoom: f32,
+    #[uniform(0)]
+    c: Vec2, // Julia constant
+    #[texture(4)]
+    #[sampler(5)]
+    colormap_texture: Handle<Image>,
+}
+
 impl Material2d for MandelbrotMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/mandelbrot_fragment.wgsl".into()
+    }
+}
+impl Material2d for JuliaMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/julia_fragment.wgsl".into()
     }
 }
 
@@ -79,13 +121,87 @@ fn mandelbrot_uniform_update_system(
     }
 }
 
+// System to update the material based on the current fractal type
+fn fractal_update_system(
+    time: Res<Time>,
+    fractal_type: Res<FractalType>,
+    mut mandelbrot_materials: ResMut<Assets<MandelbrotMaterial>>,
+    mut julia_materials: ResMut<Assets<JuliaMaterial>>,
+    mut mandelbrot_query: Query<(&mut MandelbrotMaterial, &mut Visibility), Without<JuliaMaterial>>,
+    mut julia_query: Query<(&JuliaMaterial, &mut Visibility), Without<MandelbrotMaterial>>,
+) {
+    match *fractal_type {
+        FractalType::Mandelbrot => {
+            println!("Fractal Type is Mandelbrot");
+            for (_, mut material) in mandelbrot_materials.iter_mut() {
+                material.color_scale = 0.5 * (1.0 + (time.elapsed_seconds() as f32 * 0.5).sin());
+            }
+
+            for (mut material, mut visibility) in mandelbrot_query.iter_mut() {
+                material.color_scale = 0.5 * (1.0 + (time.elapsed_seconds() as f32 * 0.5).sin());
+                *visibility = Visibility::Visible;
+            }
+            for (_, mut visibility) in julia_query.iter_mut() {
+                *visibility = Visibility::Hidden;
+            }
+        },
+        FractalType::Julia => {
+            println!("Fractal Type is Julia");
+            for (_, mut material) in julia_materials.iter_mut() {
+                material.color_scale = 0.5 * (1.0 + (time.elapsed_seconds() as f32 * 0.5).sin());
+            }
+
+            for (_, mut visibility) in julia_query.iter_mut() {
+                *visibility = Visibility::Visible;
+            }
+            for (_, mut visibility) in mandelbrot_query.iter_mut() {
+                *visibility = Visibility::Hidden;
+            }
+        }
+    }
+}
+
+
+
+
+// System to toggle between Mandelbrot and Julia fractals
+fn fractal_toggle_system(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut fractal_type: ResMut<FractalType>,
+) {
+    if keyboard_input.just_pressed(KeyCode::Space) {
+        println!("Space was pressed");
+        *fractal_type = match *fractal_type {
+            FractalType::Mandelbrot => FractalType::Julia,
+            FractalType::Julia => FractalType::Mandelbrot,
+        };
+    }
+}
+
+
 // Utility function to prepare and return a Mandelbrot material with the given uniforms.
 fn prepare_mandelbrot_material(
-    uniforms: MandelbrotUniforms,
+    uniforms: &MandelbrotUniforms,
     colormap_texture_handle: Handle<Image>,
     materials: &mut ResMut<Assets<MandelbrotMaterial>>,
 ) -> Handle<MandelbrotMaterial> {
     let material = MandelbrotMaterial {
+        max_iterations: uniforms.max_iterations as u32,
+        color_scale: uniforms.color_scale,
+        offset: uniforms.offset,
+        zoom: uniforms.zoom,
+        colormap_texture: colormap_texture_handle,
+    };
+    materials.add(material)
+}
+// Utility function to prepare and return a Mandelbrot material with the given uniforms.
+fn prepare_julia_material(
+    uniforms: &MandelbrotUniforms,
+    colormap_texture_handle: Handle<Image>,
+    materials: &mut ResMut<Assets<JuliaMaterial>>,
+) -> Handle<JuliaMaterial> {
+    let material = JuliaMaterial {
+        c: Vec2 { x: 1.0, y: 1.0 },
         max_iterations: uniforms.max_iterations as u32,
         color_scale: uniforms.color_scale,
         offset: uniforms.offset,
@@ -101,6 +217,7 @@ fn setup(
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
+    mut julia_materials: ResMut<Assets<JuliaMaterial>>,
 ) {
     // Load colormap texture for the Mandelbrot material.
     let colormap_texture_handle = asset_server.load("gradient.png");
@@ -115,7 +232,11 @@ fn setup(
 
     // Create and store Mandelbrot material.
     let mandelbrot_material_handle =
-        prepare_mandelbrot_material(uniforms, colormap_texture_handle, &mut materials);
+        prepare_mandelbrot_material(&uniforms, colormap_texture_handle.clone(), &mut materials);
+
+        // Create and store Julia material.
+    let julia_material_handle =
+        prepare_julia_material(&uniforms, colormap_texture_handle, &mut julia_materials);
 
     // Create a large quad mesh.
     let mesh = Mesh::from(shape::Quad {
@@ -126,9 +247,19 @@ fn setup(
 
     // Spawn the Mandelbrot mesh with its material in the world.
     commands.spawn(MaterialMesh2dBundle {
-        mesh: mandelbrot_mesh,
+        mesh: mandelbrot_mesh.clone(),
         material: mandelbrot_material_handle,
         transform: Transform::from_xyz(0.0, 0.5, 0.0),
+        visibility: Visibility::Visible,
+        ..Default::default()
+    });
+
+        // Spawn the Julia mesh with its material in the world (you can start it hidden or at a different position).
+    commands.spawn(MaterialMesh2dBundle {
+        mesh: mandelbrot_mesh/* ... appropriate mesh, possibly the same as Mandelbrot ... */,
+        material: julia_material_handle,
+        transform: Transform::from_xyz(0.0, 0.5, 0.0),
+        visibility: Visibility::Hidden,
         ..Default::default()
     });
 
