@@ -18,6 +18,8 @@ use bevy::render::render_resource::{AsBindGroup, ShaderRef};
 use bevy::sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
+use bevy_egui::{EguiContexts, EguiPlugin, egui};
+
 
 // The main function to initialize and run the Bevy app.
 fn main() {
@@ -30,10 +32,11 @@ fn main() {
         .init_resource::<JuliaEntity>()
         .init_resource::<MandelbrotUpdateToggle>()
         .add_plugins(DefaultPlugins)
-        .add_plugins(
-            // Add an inspector that can be toggled using the Escape key.
-            WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Escape)),
-        )
+        //.add_plugins(
+        //    // Add an inspector that can be toggled using the Escape key.
+        //    WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Escape)),
+        //)
+        .add_plugins(EguiPlugin)
         .add_plugins(PanCamPlugin::default()) // Custom camera control plugin.
         .add_plugins(LogDiagnosticsPlugin::default()) // For logging diagnostics.
         .add_plugins(FrameTimeDiagnosticsPlugin::default()) // Diagnostics for frame time.
@@ -43,7 +46,45 @@ fn main() {
         .add_systems(Update, (mandelbrot_uniform_update_system, mandelbrot_toggle_system)) // Update system for Mandelbrot material.
         .add_systems(Update, fractal_toggle_system) // Update system for Mandelbrot material.
         .add_systems(Update, fractal_update_system)
+        .add_systems(Startup, uniform_update_ui_system)
         .run();
+}
+
+
+fn uniform_update_ui_system(
+    mut ctx: EguiContexts,
+    mut materials: ResMut<Assets<MandelbrotMaterial>>,
+    mut julia_materials: ResMut<Assets<JuliaMaterial>>,
+) {
+    let context = ctx.ctx_mut();
+    let input = egui::RawInput::default();
+    let full_output = context.run(input, |ctx_internal| {
+    egui::Window::new("Hello").show(context, |ui| {
+        ui.label("world");
+    });
+    egui::Window::new("Update Uniforms").show(ctx_internal, |ui| {
+        if let Some(mandelbrot_material) = materials.iter_mut().next() {
+            ui.horizontal(|ui| {
+                ui.label("Mandelbrot Color Scale:");
+                ui.add(egui::Slider::new(&mut mandelbrot_material.1.color_scale, 0.0..=1.0));
+            });
+        }
+        if let Some(julia_material) = julia_materials.iter_mut().next() {
+            ui.horizontal(|ui| {
+                ui.label("Julia Color Scale:");
+                ui.add(egui::Slider::new(&mut julia_material.1.color_scale, 0.0..=1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Julia c.x:");
+                ui.add(egui::Slider::new(&mut julia_material.1.c.x, -2.0..=2.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Julia c.y:");
+                ui.add(egui::Slider::new(&mut julia_material.1.c.y, -2.0..=2.0));
+            });
+        }
+    });
+});
 }
 
 
@@ -294,54 +335,54 @@ fn setup(
     mut mandelbrot_entity: ResMut<MandelbrotEntity>,
     mut julia_entity: ResMut<JuliaEntity>,
 ) {
-    // Load colormap texture for the Mandelbrot material.
-    let colormap_texture_handle = asset_server.load("gradient.png");
+    //// Load colormap texture for the Mandelbrot material.
+    //let colormap_texture_handle = asset_server.load("gradient.png");
 
-    // Define uniform values for the Mandelbrot material.
-    let uniforms = MandelbrotUniforms {
-        color_scale: 0.5,
-        max_iterations: 5000.0,
-    };
+    //// Define uniform values for the Mandelbrot material.
+    //let uniforms = MandelbrotUniforms {
+    //    color_scale: 0.5,
+    //    max_iterations: 5000.0,
+    //};
 
-    // Create and store Mandelbrot material.
-    let mandelbrot_material_handle =
-        prepare_mandelbrot_material(&uniforms, colormap_texture_handle.clone(), &mut materials);
+    //// Create and store Mandelbrot material.
+    //let mandelbrot_material_handle =
+    //    prepare_mandelbrot_material(&uniforms, colormap_texture_handle.clone(), &mut materials);
 
-        // Create and store Julia material.
-    let julia_material_handle =
-        prepare_julia_material(&uniforms, colormap_texture_handle, &mut julia_materials);
+    //    // Create and store Julia material.
+    //let julia_material_handle =
+    //    prepare_julia_material(&uniforms, colormap_texture_handle, &mut julia_materials);
 
-    // Create a large quad mesh.
-    let mesh = Mesh::from(shape::Quad {
-        size: Vec2::new(10000.0, 10000.0),
-        flip: false,
-    });
-    let mandelbrot_mesh: Mesh2dHandle = Mesh2dHandle(meshes.add(mesh.clone()));
+    //// Create a large quad mesh.
+    //let mesh = Mesh::from(shape::Quad {
+    //    size: Vec2::new(10000.0, 10000.0),
+    //    flip: false,
+    //});
+    //let mandelbrot_mesh: Mesh2dHandle = Mesh2dHandle(meshes.add(mesh.clone()));
 
-    // Spawn the Mandelbrot mesh with its material in the world.
-    let mandelbrot_mesh_entity = commands.spawn(MaterialMesh2dBundle {
-        mesh: mandelbrot_mesh.clone(),
-        material: mandelbrot_material_handle,
-        transform: Transform::from_xyz(0.0, 0.5, 0.0),
-        visibility: Visibility::Visible,
-        ..Default::default()
-    }).id();
+    //// Spawn the Mandelbrot mesh with its material in the world.
+    //let mandelbrot_mesh_entity = commands.spawn(MaterialMesh2dBundle {
+    //    mesh: mandelbrot_mesh.clone(),
+    //    material: mandelbrot_material_handle,
+    //    transform: Transform::from_xyz(0.0, 0.5, 0.0),
+    //    visibility: Visibility::Visible,
+    //    ..Default::default()
+    //}).id();
 
-        // Spawn the Julia mesh with its material in the world (you can start it hidden or at a different position).
-    let julia_mesh_entity = commands.spawn(MaterialMesh2dBundle {
-        mesh: mandelbrot_mesh/* ... appropriate mesh, possibly the same as Mandelbrot ... */,
-        material: julia_material_handle,
-        transform: Transform::from_xyz(0.0, 0.5, 0.0),
-        visibility: Visibility::Visible,
-        ..Default::default()
-    }).id();
+    //    // Spawn the Julia mesh with its material in the world (you can start it hidden or at a different position).
+    //let julia_mesh_entity = commands.spawn(MaterialMesh2dBundle {
+    //    mesh: mandelbrot_mesh/* ... appropriate mesh, possibly the same as Mandelbrot ... */,
+    //    material: julia_material_handle,
+    //    transform: Transform::from_xyz(0.0, 0.5, 0.0),
+    //    visibility: Visibility::Visible,
+    //    ..Default::default()
+    //}).id();
 
-    mandelbrot_entity.0 = Some(mandelbrot_mesh_entity);
+    //mandelbrot_entity.0 = Some(mandelbrot_mesh_entity);
 
-    julia_entity.0 = Some(julia_mesh_entity);
+    //julia_entity.0 = Some(julia_mesh_entity);
 
-    // Initially, we can decide to despawn the Julia mesh, for example:
-    commands.entity(julia_entity.0.unwrap()).despawn();
+    //// Initially, we can decide to despawn the Julia mesh, for example:
+    //commands.entity(julia_entity.0.unwrap()).despawn();
 
     // Add a camera with custom pan and zoom capabilities.
     commands.spawn((

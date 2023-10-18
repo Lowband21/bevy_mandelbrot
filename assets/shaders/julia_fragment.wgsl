@@ -40,7 +40,7 @@ fn fragment(
 
     // Convert iteration count to color
     let basic_color: f32 = f32(iteration) / f32(max_iterations);
-    let adjusted_color = pow(basic_color, 0.3);
+    let adjusted_color = pow(basic_color, 0.1);
     let color = adjusted_color * (1.0 - color_scale) + color_scale;
 
     // Sample from the colormap texture
