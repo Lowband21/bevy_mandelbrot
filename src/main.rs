@@ -18,9 +18,19 @@ use bevy::render::render_resource::{AsBindGroup, ShaderRef};
 use bevy::sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
-use bevy_egui::{EguiContexts, EguiPlugin, egui};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
+use audioviz::io::{Device, Input, InputController};
+use bevy::audio::*;
 
+use audioviz::spectrum::{
+    config::{Interpolation, ProcessorConfig, StreamConfig},
+    stream::Stream,
+    Frequency,
+};
+
+#[derive(Component)]
+struct MyMusic;
 // The main function to initialize and run the Bevy app.
 fn main() {
     // Initializing the Bevy app and adding various plugins.
@@ -30,7 +40,9 @@ fn main() {
         .init_resource::<FractalType>()
         .init_resource::<MandelbrotEntity>()
         .init_resource::<JuliaEntity>()
-        .init_resource::<MandelbrotUpdateToggle>()
+        .init_resource::<AnimationUpdateToggle>()
+        .init_resource::<MusicUpdateToggle>()
+        .init_resource::<LastRms>()
         .add_plugins(DefaultPlugins)
         //.add_plugins(
         //    // Add an inspector that can be toggled using the Escape key.
@@ -43,36 +55,187 @@ fn main() {
         .add_systems(Startup, setup) // Setup function called at startup.
         .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default()) // Plugin for 2D materials.
         .add_plugins(Material2dPlugin::<JuliaMaterial>::default()) // Plugin for 2D materials.
-        .add_systems(Update, (mandelbrot_uniform_update_system, mandelbrot_toggle_system)) // Update system for Mandelbrot material.
+        .add_systems(
+            Update,
+            (mandelbrot_uniform_update_system, mandelbrot_toggle_system),
+        ) // Update system for Mandelbrot material.
         .add_systems(Update, fractal_toggle_system) // Update system for Mandelbrot material.
         .add_systems(Update, fractal_update_system)
-        .add_systems(Startup, uniform_update_ui_system)
+        .add_systems(Update, uniform_update_ui_system)
+        //.add_systems(Startup, (setup_audio))
+        .add_systems(Update, (update_system_sound_level, update_from_music))
         .run();
 }
 
+#[derive(Component)]
+struct SystemSoundLevel {
+    value: f32,
+}
 
+#[derive(Resource, Default)]
+struct LastRms(f32);
+
+fn setup_audio(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let music_handle = asset_server.load("audio/1-06 Solitude Is Bliss.flac");
+
+    commands.spawn((
+        AudioBundle {
+            source: music_handle,
+            ..Default::default()
+        },
+        MyMusic,
+        SystemSoundLevel { value: 0.0 }, // New component
+    ));
+}
+fn update_system_sound_level(
+    mut sound_level_query: Query<&mut SystemSoundLevel, With<MyMusic>>,
+    last_rms: ResMut<LastRms>,
+    toggle: Res<MusicUpdateToggle>,
+) {
+    if !toggle.active {
+        return;
+    }
+    // Initialize audio input and spectrum visualizer stream just once.
+    // You might consider moving this to a startup system or a resource.
+    let mut audio_input = Input::new();
+    let (_channel_count, _sampling_rate, input_controller) =
+        audio_input.init(&Device::DefaultInput, None).unwrap();
+    let mut stream: Stream = Stream::new(StreamConfig::default());
+    let mut sound_level = 0.0;
+
+    loop {
+        if let Some(data) = input_controller.pull_data() {
+            sound_level = compute_sound_level_from_frequencies(&data, last_rms);
+            stream.push_data(data);
+            stream.update();
+        } else {
+            println!("Failed to pull data");
+        }
+
+        //stream.update();
+        // Retrieve frequencies
+        //let frequencies = stream.get_frequencies();
+        //println!("{}", frequencies[0].len());
+        // Compute sound level from frequencies (this could be RMS or some other measure)
+        //let flattened_frequencies: Vec<Frequency> = frequencies.into_iter().flatten().collect();
+
+        // Update SystemSoundLevel component
+        for mut system_sound_level in sound_level_query.iter_mut() {
+            system_sound_level.value = sound_level;
+        }
+        break;
+    }
+}
+
+fn compute_sound_level_from_frequencies(
+    frequencies: &Vec<f32>,
+    mut last_rms: ResMut<LastRms>,
+) -> f32 {
+    // Define bass frequency range indices
+    let bass_range = 0..50;
+
+    // Filter out only the bass frequencies
+    let bass_frequencies: Vec<f32> = frequencies[bass_range.clone()].to_vec();
+
+    if bass_frequencies.is_empty() {
+        println!("Bass frequencies array is empty");
+        return 0.0;
+    }
+
+    let mut sum_of_squares = 0.0;
+
+    for &frequency in bass_frequencies.iter() {
+        if frequency.is_nan() || frequency.is_infinite() {
+            println!("Invalid frequency value: {}", frequency);
+            continue;
+        }
+        sum_of_squares += frequency.powi(2);
+    }
+
+    if sum_of_squares <= 0.0 {
+        println!("Sum of squares is non-positive: {}", sum_of_squares);
+        return 0.0;
+    }
+
+    let rms = (sum_of_squares / bass_frequencies.len() as f32).sqrt();
+
+    if rms.is_nan() || rms.is_infinite() {
+        println!("Invalid RMS: {}", rms);
+        return 0.0;
+    }
+
+    // EMA smoothing
+    // Alpha is the weight of the new sample, should be between 0 and 1.
+    // Higher alpha discounts older observations faster.
+    let alpha = 0.1;
+    last_rms.0 = alpha * rms + (1.0 - alpha) * last_rms.0;
+
+    // Debugging
+    println!("Smoothed RMS: {}", last_rms.0);
+
+    // Return the smoothed RMS
+    last_rms.0 * 1000.0 + 0.5
+}
+
+fn update_from_music(
+    mut materials: ResMut<Assets<MandelbrotMaterial>>,
+    music_controller: Query<(&AudioSink, &SystemSoundLevel), With<MyMusic>>,
+    toggle: Res<MusicUpdateToggle>,
+) {
+    if !toggle.active {
+        return;
+    }
+    for (_audio_sink, sound_level) in music_controller.iter() {
+        if let Some(mandelbrot_material) = materials.iter_mut().next() {
+            mandelbrot_material.1.color_scale = sound_level.value;
+        }
+    }
+}
 fn uniform_update_ui_system(
     mut ctx: EguiContexts,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
     mut julia_materials: ResMut<Assets<JuliaMaterial>>,
+    mut pancam_query: Query<&mut PanCamState>,
 ) {
     let context = ctx.ctx_mut();
-    let input = egui::RawInput::default();
-    let full_output = context.run(input, |ctx_internal| {
-    egui::Window::new("Hello").show(context, |ui| {
-        ui.label("world");
-    });
-    egui::Window::new("Update Uniforms").show(ctx_internal, |ui| {
+    egui::Window::new("Update Uniforms").show(context, |ui| {
         if let Some(mandelbrot_material) = materials.iter_mut().next() {
             ui.horizontal(|ui| {
                 ui.label("Mandelbrot Color Scale:");
-                ui.add(egui::Slider::new(&mut mandelbrot_material.1.color_scale, 0.0..=1.0));
+                ui.add(egui::Slider::new(
+                    &mut mandelbrot_material.1.color_scale,
+                    0.0..=1.0,
+                ));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Mandelbrot Iterations:");
+                ui.add(egui::Slider::new(
+                    &mut mandelbrot_material.1.max_iterations,
+                    0.0..=100000.0,
+                ));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Mandelbrot Zoom:");
+                ui.add(egui::Slider::new(
+                    &mut pancam_query.get_single_mut().unwrap().target_zoom,
+                    0.0..=100.0,
+                ));
             });
         }
         if let Some(julia_material) = julia_materials.iter_mut().next() {
             ui.horizontal(|ui| {
                 ui.label("Julia Color Scale:");
-                ui.add(egui::Slider::new(&mut julia_material.1.color_scale, 0.0..=1.0));
+                ui.add(egui::Slider::new(
+                    &mut julia_material.1.color_scale,
+                    0.0..=1.0,
+                ));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Julia Iterations:");
+                ui.add(egui::Slider::new(
+                    &mut julia_material.1.max_iterations,
+                    0.0..=100000.0,
+                ));
             });
             ui.horizontal(|ui| {
                 ui.label("Julia c.x:");
@@ -84,9 +247,7 @@ fn uniform_update_ui_system(
             });
         }
     });
-});
 }
-
 
 // These handles will store the references to our spawned entities.
 #[derive(Resource)]
@@ -111,7 +272,6 @@ enum FractalType {
     Julia,
 }
 
-
 impl Default for FractalType {
     fn default() -> Self {
         FractalType::Mandelbrot
@@ -119,13 +279,22 @@ impl Default for FractalType {
 }
 
 #[derive(Resource)]
-struct MandelbrotUpdateToggle {
+struct AnimationUpdateToggle {
+    active: bool,
+}
+#[derive(Resource)]
+struct MusicUpdateToggle {
     active: bool,
 }
 
-impl Default for MandelbrotUpdateToggle {
+impl Default for AnimationUpdateToggle {
     fn default() -> Self {
-        MandelbrotUpdateToggle { active: true }
+        AnimationUpdateToggle { active: true }
+    }
+}
+impl Default for MusicUpdateToggle {
+    fn default() -> Self {
+        MusicUpdateToggle { active: false }
     }
 }
 
@@ -143,6 +312,12 @@ struct MandelbrotMaterial {
     color_scale: f32,
     #[uniform(1)]
     max_iterations: f32,
+    #[uniform(2)]
+    zoom: f32,
+    #[uniform(3)]
+    offset: Vec2,
+    #[uniform(6)]
+    global_offset: Vec2,
     #[texture(4)]
     #[sampler(5)]
     colormap_texture: Handle<Image>,
@@ -175,11 +350,17 @@ impl Material2d for JuliaMaterial {
 }
 
 fn mandelbrot_toggle_system(
-    keyboard_input: Res<Input<KeyCode>>,
-    mut toggle: ResMut<MandelbrotUpdateToggle>,
+    keyboard_input: Res<bevy::input::Input<KeyCode>>,
+    mut animation_toggle: ResMut<AnimationUpdateToggle>,
+    mut music_toggle: ResMut<MusicUpdateToggle>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::A) {  // You can choose another key if needed
-        toggle.active = !toggle.active;
+    if keyboard_input.just_pressed(KeyCode::A) {
+        // You can choose another key if needed
+        animation_toggle.active = !animation_toggle.active;
+    }
+    if keyboard_input.just_pressed(KeyCode::M) {
+        // You can choose another key if needed
+        music_toggle.active = !music_toggle.active;
     }
 }
 
@@ -187,24 +368,43 @@ fn mandelbrot_toggle_system(
 fn mandelbrot_uniform_update_system(
     time: Res<Time>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
-    mut julia_materials: ResMut<Assets<JuliaMaterial>>,  // For Julia material
-    toggle: Res<MandelbrotUpdateToggle>,
+    mut julia_materials: ResMut<Assets<JuliaMaterial>>, // For Julia material
+    toggle: Res<AnimationUpdateToggle>,
+    pancam_query: Query<&PanCamState>,
 ) {
     if !toggle.active {
         return;
     }
     for (_, mut material) in materials.iter_mut() {
-        material.color_scale = (0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.01).sin())).min(0.8).max(0.2);
+        material.color_scale = (0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.1).sin()));
+        let pancam = pancam_query.get_single().unwrap();
+        material.zoom = pancam.current_zoom;
+
+        let offset = Vec2::new(
+            pancam
+                .target_translation
+                .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
+                .x,
+            pancam
+                .target_translation
+                .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
+                .y,
+        );
+        material.offset = offset;
+        material.global_offset = offset / pancam.current_zoom;
     }
     for (_, mut material) in julia_materials.iter_mut() {
         // Different frequencies and phase shifts for x and y components
-        material.color_scale = (0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.01).sin())).min(0.8).max(0.2);
-        material.c.y = 0.8 * 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
-        material.c.x = 0.2 * 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
-        
-        println!("X: {}, Y: {}", material.c.x, material.c.y);
+        material.color_scale = (0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * 0.01).sin()))
+            .min(0.8)
+            .max(0.2);
+        material.c.y =
+            0.8 * 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
+        material.c.x =
+            0.2 * 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
+
+        //println!("X: {}, Y: {}", material.c.x, material.c.y);
     }
-    
 }
 
 use bevy::ecs::entity::Entities;
@@ -213,10 +413,10 @@ use bevy::ecs::entity::Entities;
 fn fractal_update_system(
     entities: &Entities,
     mut commands: Commands,
-    asset_server: Res<AssetServer>,  // For loading assets
-    mut materials: ResMut<Assets<MandelbrotMaterial>>,  // For Mandelbrot material
-    mut julia_materials: ResMut<Assets<JuliaMaterial>>,  // For Julia material
-    mut meshes: ResMut<Assets<Mesh>>,  // For meshes
+    asset_server: Res<AssetServer>, // For loading assets
+    mut materials: ResMut<Assets<MandelbrotMaterial>>, // For Mandelbrot material
+    mut julia_materials: ResMut<Assets<JuliaMaterial>>, // For Julia material
+    mut meshes: ResMut<Assets<Mesh>>, // For meshes
     fractal_type: Res<FractalType>,
     mut mandelbrot_entity: ResMut<MandelbrotEntity>,
     mut julia_entity: ResMut<JuliaEntity>,
@@ -230,7 +430,7 @@ fn fractal_update_system(
             max_iterations: 5000.0,
         };
         let mesh = Mesh::from(shape::Quad {
-            size: Vec2::new(10000.0, 10000.0),
+            size: Vec2::new(100000.0, 100000.0),
             flip: false,
         });
         let mandelbrot_mesh: Mesh2dHandle = Mesh2dHandle(meshes.add(mesh.clone()));
@@ -244,15 +444,22 @@ fn fractal_update_system(
                 }
 
                 // Spawn Mandelbrot entity
-                let mandelbrot_material_handle =
-                    prepare_mandelbrot_material(&uniforms, colormap_texture_handle.clone(), &mut materials);
-                mandelbrot_entity.0 = Some(commands.spawn(MaterialMesh2dBundle {
-                    mesh: mandelbrot_mesh.clone(),
-                    material: mandelbrot_material_handle,
-                    transform: Transform::from_xyz(0.0, 0.5, 0.0),
-                    ..Default::default()
-                }).id());
-            },
+                let mandelbrot_material_handle = prepare_mandelbrot_material(
+                    &uniforms,
+                    colormap_texture_handle.clone(),
+                    &mut materials,
+                );
+                mandelbrot_entity.0 = Some(
+                    commands
+                        .spawn(MaterialMesh2dBundle {
+                            mesh: mandelbrot_mesh.clone(),
+                            material: mandelbrot_material_handle,
+                            transform: Transform::from_xyz(0.0, 0.5, 0.0),
+                            ..Default::default()
+                        })
+                        .id(),
+                );
+            }
             FractalType::Julia => {
                 if let Some(entity) = mandelbrot_entity.0 {
                     if entities.contains(entity) {
@@ -261,30 +468,29 @@ fn fractal_update_system(
                 }
 
                 // Spawn Julia entity
-                let julia_material_handle =
-                    prepare_julia_material(&uniforms, colormap_texture_handle, &mut julia_materials);
-                julia_entity.0 = Some(commands.spawn(MaterialMesh2dBundle {
-                    mesh: mandelbrot_mesh.clone(),
-                    material: julia_material_handle,
-                    transform: Transform::from_xyz(0.0, 0.5, 0.0),
-                    ..Default::default()
-                }).id());
-
+                let julia_material_handle = prepare_julia_material(
+                    &uniforms,
+                    colormap_texture_handle,
+                    &mut julia_materials,
+                );
+                julia_entity.0 = Some(
+                    commands
+                        .spawn(MaterialMesh2dBundle {
+                            mesh: mandelbrot_mesh.clone(),
+                            material: julia_material_handle,
+                            transform: Transform::from_xyz(0.0, 0.5, 0.0),
+                            ..Default::default()
+                        })
+                        .id(),
+                );
             }
         }
-
     }
 }
 
-
-
-
-
-
-
 // System to toggle between Mandelbrot and Julia fractals
 fn fractal_toggle_system(
-    keyboard_input: Res<Input<KeyCode>>,
+    keyboard_input: Res<bevy::input::Input<KeyCode>>,
     mut fractal_type: ResMut<FractalType>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
@@ -296,7 +502,6 @@ fn fractal_toggle_system(
     }
 }
 
-
 // Utility function to prepare and return a Mandelbrot material with the given uniforms.
 fn prepare_mandelbrot_material(
     uniforms: &MandelbrotUniforms,
@@ -306,6 +511,9 @@ fn prepare_mandelbrot_material(
     let material = MandelbrotMaterial {
         max_iterations: uniforms.max_iterations,
         color_scale: uniforms.color_scale,
+        zoom: 4.5,
+        offset: Vec2 { x: 0.0, y: 0.0 },
+        global_offset: Vec2 { x: 0.0, y: 0.0 } / 4.5,
         colormap_texture: colormap_texture_handle,
     };
     materials.add(material)
@@ -335,55 +543,6 @@ fn setup(
     mut mandelbrot_entity: ResMut<MandelbrotEntity>,
     mut julia_entity: ResMut<JuliaEntity>,
 ) {
-    //// Load colormap texture for the Mandelbrot material.
-    //let colormap_texture_handle = asset_server.load("gradient.png");
-
-    //// Define uniform values for the Mandelbrot material.
-    //let uniforms = MandelbrotUniforms {
-    //    color_scale: 0.5,
-    //    max_iterations: 5000.0,
-    //};
-
-    //// Create and store Mandelbrot material.
-    //let mandelbrot_material_handle =
-    //    prepare_mandelbrot_material(&uniforms, colormap_texture_handle.clone(), &mut materials);
-
-    //    // Create and store Julia material.
-    //let julia_material_handle =
-    //    prepare_julia_material(&uniforms, colormap_texture_handle, &mut julia_materials);
-
-    //// Create a large quad mesh.
-    //let mesh = Mesh::from(shape::Quad {
-    //    size: Vec2::new(10000.0, 10000.0),
-    //    flip: false,
-    //});
-    //let mandelbrot_mesh: Mesh2dHandle = Mesh2dHandle(meshes.add(mesh.clone()));
-
-    //// Spawn the Mandelbrot mesh with its material in the world.
-    //let mandelbrot_mesh_entity = commands.spawn(MaterialMesh2dBundle {
-    //    mesh: mandelbrot_mesh.clone(),
-    //    material: mandelbrot_material_handle,
-    //    transform: Transform::from_xyz(0.0, 0.5, 0.0),
-    //    visibility: Visibility::Visible,
-    //    ..Default::default()
-    //}).id();
-
-    //    // Spawn the Julia mesh with its material in the world (you can start it hidden or at a different position).
-    //let julia_mesh_entity = commands.spawn(MaterialMesh2dBundle {
-    //    mesh: mandelbrot_mesh/* ... appropriate mesh, possibly the same as Mandelbrot ... */,
-    //    material: julia_material_handle,
-    //    transform: Transform::from_xyz(0.0, 0.5, 0.0),
-    //    visibility: Visibility::Visible,
-    //    ..Default::default()
-    //}).id();
-
-    //mandelbrot_entity.0 = Some(mandelbrot_mesh_entity);
-
-    //julia_entity.0 = Some(julia_mesh_entity);
-
-    //// Initially, we can decide to despawn the Julia mesh, for example:
-    //commands.entity(julia_entity.0.unwrap()).despawn();
-
     // Add a camera with custom pan and zoom capabilities.
     commands.spawn((
         Camera2dBundle::default(),
@@ -392,12 +551,12 @@ fn setup(
             enabled: true,
             zoom_to_cursor: true,
             min_scale: 0.00012,
-            max_scale: Some(7.5),
-            min_x: Some(-5000.0),
-            min_y: Some(-5000.0),
-            max_x: Some(5000.0),
-            max_y: Some(5000.0),
-            pixels_per_line: 100.0,
+            max_scale: Some(100.0),
+            min_x: Some(-50000.0),
+            min_y: Some(-50000.0),
+            max_x: Some(50000.0),
+            max_y: Some(50000.0),
+            pixels_per_line: 10.0,
             base_zoom_multiplier: 10.0,
             shift_multiplier_normal: 10.0,
             shift_multiplier_shifted: 100.0,
@@ -406,7 +565,7 @@ fn setup(
         },
         PanCamState {
             current_zoom: 1.0,
-            target_zoom: 4.5,
+            target_zoom: 75.0,
             is_zooming: true,
             target_translation: None,
             delta_zoom_translation: None,

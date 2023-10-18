@@ -11,6 +11,12 @@ var<uniform> color_scale: f32;
 @group(1) @binding(1)
 var<uniform> max_iterations: f32;
 
+@group(1) @binding(2)
+var<uniform> zoom: f32;
+
+@group(1) @binding(3)
+var<uniform> offset: vec2<f32>;
+
 @fragment
 fn fragment(
     @builtin(position) coord: vec4<f32>,
