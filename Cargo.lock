@@ -765,6 +765,7 @@ dependencies = [
  "audioviz",
  "bevy",
  "bevy-inspector-egui",
+ "bevy_asset",
  "bevy_egui",
  "wgpu 0.17.1",
 ]
