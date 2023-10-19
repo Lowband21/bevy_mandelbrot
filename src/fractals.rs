@@ -169,6 +169,7 @@ fn fractal_update_system(
                         })
                         .id(),
                 );
+                println!("Spawned Mandelbrot");
             }
             FractalType::Julia => {
                 if let Some(entity) = mandelbrot_entity.0 {
@@ -193,6 +194,7 @@ fn fractal_update_system(
                         })
                         .id(),
                 );
+                println!("Spawned Julia");
             }
         }
     }
