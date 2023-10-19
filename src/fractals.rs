@@ -40,7 +40,7 @@ impl Plugin for FractalControlPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FractalType>();
         app.init_resource::<AnimationUpdateToggle>();
-        app.add_systems(Update, (uniform_update_system, fractal_toggle_system)); // Update system for Mandelbrot material.
+        app.add_systems(Update, uniform_update_system); // Update system for Mandelbrot material.
         app.add_systems(Update, fractal_toggle_system); // Update system for Mandelbrot material.
         app.add_systems(Update, fractal_update_system);
     }
@@ -54,7 +54,6 @@ fn fractal_toggle_system(
     mut music_toggle: ResMut<MusicUpdateToggle>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        println!("Space was pressed");
         *fractal_type = match *fractal_type {
             FractalType::Mandelbrot => FractalType::Julia,
             FractalType::Julia => FractalType::Mandelbrot,

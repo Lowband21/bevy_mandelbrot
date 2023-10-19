@@ -42,13 +42,13 @@ impl Default for MusicUpdateToggle {
 }
 
 fn setup_audio(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let music_handle = asset_server.load("audio/1-06 Solitude Is Bliss.flac");
+    //let music_handle = asset_server.load("audio/1-06 Solitude Is Bliss.flac");
 
     commands.spawn((
-        AudioBundle {
-            source: music_handle,
-            ..Default::default()
-        },
+        //AudioBundle {
+        //    source: music_handle,
+        //    ..Default::default()
+        //},
         MyMusic,
         SystemSoundLevel { value: 0.0 }, // New component
     ));
