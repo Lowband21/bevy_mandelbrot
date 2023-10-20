@@ -8,7 +8,7 @@ use crate::julia_material::{prepare_julia_material, JuliaEntity, JuliaMaterial, 
 use crate::mandelbrot_material::{
     prepare_mandelbrot_material, MandelbrotEntity, MandelbrotMaterial, MandelbrotUniforms,
 };
-use crate::PanCamState;
+use crate::pancam::PanCam;
 
 #[derive(Resource)]
 enum FractalType {
@@ -86,7 +86,8 @@ fn uniform_update_system(
     mut julia_materials: ResMut<Assets<JuliaMaterial>>, // For Julia material
     toggle: Res<AnimationUpdateToggle>,
     animation_speed: ResMut<AnimationSpeed>,
-    pancam_query: Query<&PanCamState>,
+    pancam_query: Query<&PanCam>,
+    query: Query<(&OrthographicProjection, &Transform)>,
 ) {
     if !toggle.active {
         return;
@@ -95,20 +96,32 @@ fn uniform_update_system(
         material.color_scale =
             0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin());
         let pancam = pancam_query.get_single().unwrap();
-        material.zoom = pancam.current_zoom;
 
-        let offset = Vec2::new(
-            pancam
-                .target_translation
-                .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
-                .x,
-            pancam
-                .target_translation
-                .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
-                .y,
-        );
-        material.offset = offset;
-        material.global_offset = offset / pancam.current_zoom;
+        material.offset = pancam.translation;
+        material.zoom = pancam.zoom;
+        //material.offset = Vec2::new(
+        //    pancam
+        //        .target_translation
+        //        .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
+        //        .x,
+        //    pancam
+        //        .target_translation
+        //        .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
+        //        .y,
+        //);
+
+        //let offset = Vec2::new(
+        //    pancam
+        //        .target_translation
+        //        .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
+        //        .x,
+        //    pancam
+        //        .target_translation
+        //        .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
+        //        .y,
+        //);
+        //material.offset = offset;
+        //material.global_offset = offset / pancam.current_zoom;
     }
     for (_, mut material) in julia_materials.iter_mut() {
         // Different frequencies and phase shifts for x and y components

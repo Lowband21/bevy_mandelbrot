@@ -43,6 +43,9 @@ impl Material2d for MandelbrotMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/mandelbrot_fragment.wgsl".into()
     }
+    //fn vertex_shader() -> ShaderRef {
+    //    "shaders/mandelbrot_vertex.wgsl".into()
+    //}
 }
 
 // Utility function to prepare and return a Mandelbrot material with the given uniforms.

@@ -1,8 +1,8 @@
 use crate::audio::*;
 use crate::fractals::AnimationSpeed;
+use crate::pancam::PanCam;
 use crate::JuliaMaterial;
 use crate::MandelbrotMaterial;
-use crate::PanCamState;
 use bevy::prelude::*;
 
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -20,7 +20,7 @@ fn uniform_update_ui_system(
     mut ctx: EguiContexts,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
     mut julia_materials: ResMut<Assets<JuliaMaterial>>,
-    mut pancam_query: Query<&mut PanCamState>,
+    mut pancam_query: Query<&mut PanCam>,
     mut animation_speed: ResMut<AnimationSpeed>,
     mut query: Query<(&mut OrthographicProjection, &mut Transform)>,
 ) {
@@ -46,12 +46,19 @@ fn uniform_update_ui_system(
                 ));
             });
 
-            for (mut proj, _pos) in &mut query {
-                ui.horizontal(|ui| {
-                    ui.label("Mandelbrot Zoom:");
-                    ui.add(egui::Slider::new(&mut proj.scale, 0.0..=8.0));
-                });
-            }
+            let mut pancam = pancam_query.get_single_mut().unwrap();
+            ui.horizontal(|ui| {
+                ui.label("Mandelbrot Zoom:");
+                ui.add(egui::Slider::new(&mut pancam.zoom, 0.0..=10.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Mandelbrot X Position:");
+                ui.add(egui::Slider::new(&mut pancam.translation.x, -1.0..=1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Mandelbrot Y Position:");
+                ui.add(egui::Slider::new(&mut pancam.translation.y, -1.0..=1.0));
+            });
         }
         if let Some(julia_material) = julia_materials.iter_mut().next() {
             ui.horizontal(|ui| {

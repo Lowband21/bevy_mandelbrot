@@ -24,10 +24,19 @@ fn fragment(
     @location(1) normals: vec3<f32>,
     @location(2) uv: vec2<f32>
 ) -> @location(0) vec4<f32> {
-    var c: vec2<f32> = uv * 4.0 - 2.0;
+
+    // Debugging: Hard-code the zoom value to see if shader updates
+    //let zoom: f32 = 2.0; // hardcoded value for zoom
+
+    // Debugging: Visualize UV coordinates
+    // return vec4<f32>(uv, 0.0, 1.0);
+
+    var c: vec2<f32> = (uv - vec2<f32>(0.5, 0.5)) * (4.0 * zoom) + offset;
     var z: vec2<f32> = vec2<f32>(0.0, 0.0);
     var iteration: f32 = 0.0;
-    //let max_iterations: f32 = 1000.0;
+
+    // Debugging: Hard-code max_iterations
+    // let max_iterations: f32 = 1000.0;
 
     // Check for early exit
     let q: f32 = (c.x - 0.25) * (c.x - 0.25) + c.y * c.y;
@@ -38,8 +47,6 @@ fn fragment(
             let x: f32 = (z.x * z.x - z.y * z.y) + c.x;
             let y: f32 = (2.0 * z.x * z.y) + c.y;
             if (abs(x) > 2.0 || abs(y) > 2.0) {
-                // Modify iteration based on the distance from the origin
-                //iteration += (1.0 - length(z) / 2.0) * 20.0; // 20.0 is an arbitrary factor to control gradient strength
                 break;
             }
             z.x = x;
@@ -55,5 +62,9 @@ fn fragment(
 
     // Sample from the colormap texture
     let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(color, 0.5));
+
+    // Debugging: Output the calculated color without sampling the texture
+    // return vec4<f32>(color, color, color, 1.0);
+
     return colormap_color;
 }
