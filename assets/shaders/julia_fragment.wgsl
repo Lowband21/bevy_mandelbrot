@@ -23,25 +23,30 @@ fn fragment(
 ) -> @location(0) vec4<f32> {
     var z: vec2<f32> = uv * 4.0 - 2.0; // z starts as the current pixel
     var iteration: f32 = 0.0;
-
+    let four: f32 = 4.0;
+    let two: f32 = 2.0;
+    
     while (iteration < max_iterations) {
         let x_squared: f32 = z.x * z.x;
         let y_squared: f32 = z.y * z.y;
-        let two_xy: f32 = 2.0 * z.x * z.y;
-        
-        if (x_squared + y_squared > 4.0) {
+
+        if (x_squared + y_squared > four) {
             break;
         }
 
+        let two_xy: f32 = two * z.x * z.y;
+        
         z.x = x_squared - y_squared + c.x;
         z.y = two_xy + c.y;
         
-        iteration = iteration + 1.0;
+        iteration += 1.0;
     }
 
     let basic_color = iteration / max_iterations;
+    // Here you may want to use an approximation for pow if possible
     let color = pow(basic_color, 0.1) * (1.0 - color_scale) + color_scale;
 
     let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(color, 0.5));
     return colormap_color;
 }
+
