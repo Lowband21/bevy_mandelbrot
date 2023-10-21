@@ -2,6 +2,11 @@
 @group(1) @binding(2) var<uniform> zoom: f32;
 @group(1) @binding(3) var<uniform> offset: vec2<f32>;
 
+@group(1) @binding(7)
+var<uniform> chunk_offset: vec2<f32>;
+@group(1) @binding(6)
+var<uniform> chunk_zoom: f32;
+
 // Define the input and output structs
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
@@ -21,25 +26,21 @@ struct VertexOutput {
 fn vertex(vertex: Vertex) -> VertexOutput {
     var out: VertexOutput;
 
-    // Translate vertex position so center becomes the origin
-    let translated_position = vertex.position.xy - vec2<f32>(0.5, 0.5);
+    // Apply only chunk_zoom and chunk_offset to vertex position.
+    let zoomed_position: vec3<f32> = vertex.position * vec3<f32>(chunk_zoom, chunk_zoom, 1.0); // Using chunk_zoom
+    let chunk_offset_position: vec3<f32> = zoomed_position + vec3<f32>(chunk_offset.x, chunk_offset.y, 0.0); // Using chunk_offset
 
-    // Apply zoom to vertex position
-    let zoomed_position = translated_position * zoom;
+    // Set clip_position and world_position based on chunk_zoom and chunk_offset only.
+    out.clip_position = vec4<f32>(chunk_offset_position, 1.0);
+    out.world_position = vec4<f32>(chunk_offset_position, 1.0);
 
-    // Apply offset
-    let offset_position = zoomed_position + offset;
-
-    // Re-translate back and update z-coordinate
-    let final_position = vec3<f32>(offset_position.x + 0.5, offset_position.y + 0.5, vertex.position.z);
-
-    // Set clip_position and world_position
-    out.clip_position = vec4<f32>(final_position, 1.0);
-    out.world_position = vec4<f32>(final_position, 1.0); 
-
-    // Other unchanged code
+    // Assuming normals are facing positively along the z-axis (No change here).
     out.normals = vec3<f32>(0.0, 0.0, 1.0);
-    out.uv = vertex.position.xy;
+
+    // Modify the UVs to include only chunk_offset and chunk_zoom
+    // Assuming the mesh has normalized coordinates, adjust them for this chunk.
+    let chunk_zoomed_uv: vec2<f32> = vertex.position.xy * vec2<f32>(chunk_zoom, chunk_zoom); // Using chunk_zoom
+    out.uv = chunk_zoomed_uv + chunk_offset; // Using chunk_offset
 
     return out;
 }

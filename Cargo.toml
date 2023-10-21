@@ -11,4 +11,5 @@ bevy = { version = "0.11.3", features = ["wayland", "bevy_render", "flac", "bevy
 bevy-inspector-egui = "0.20.0"
 bevy_asset = "0.11.3"
 bevy_egui = {version = "0.22.0", features = ["immutable_ctx"]}
+uuid = "1.5.0"
 wgpu = "0.17.1"

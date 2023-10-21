@@ -46,19 +46,26 @@ fn uniform_update_ui_system(
                 ));
             });
 
-            let mut pancam = pancam_query.get_single_mut().unwrap();
-            ui.horizontal(|ui| {
-                ui.label("Mandelbrot Zoom:");
-                ui.add(egui::Slider::new(&mut pancam.zoom, 0.0..=10.0));
-            });
-            ui.horizontal(|ui| {
-                ui.label("Mandelbrot X Position:");
-                ui.add(egui::Slider::new(&mut pancam.translation.x, -1.0..=1.0));
-            });
-            ui.horizontal(|ui| {
-                ui.label("Mandelbrot Y Position:");
-                ui.add(egui::Slider::new(&mut pancam.translation.y, -1.0..=1.0));
-            });
+            for (mut projection, mut transform) in &mut query {
+                ui.horizontal(|ui| {
+                    ui.label("Mandelbrot Zoom:");
+                    ui.add(egui::Slider::new(&mut projection.scale, 0.0..=100.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Mandelbrot X Position:");
+                    ui.add(egui::Slider::new(
+                        &mut transform.translation.x,
+                        -1000.0..=1000.0,
+                    ));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Mandelbrot Y Position:");
+                    ui.add(egui::Slider::new(
+                        &mut transform.translation.y,
+                        -1000.0..=1000.0,
+                    ));
+                });
+            }
         }
         if let Some(julia_material) = julia_materials.iter_mut().next() {
             ui.horizontal(|ui| {

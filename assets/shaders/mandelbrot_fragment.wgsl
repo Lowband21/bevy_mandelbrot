@@ -11,11 +11,11 @@ var<uniform> color_scale: f32;
 @group(1) @binding(1)
 var<uniform> max_iterations: f32;
 
-@group(1) @binding(2)
-var<uniform> zoom: f32;
+@group(1) @binding(7)
+var<uniform> chunk_offset: vec2<f32>;
 
-@group(1) @binding(3)
-var<uniform> offset: vec2<f32>;
+@group(1) @binding(8)
+var<uniform> chunk_id: vec2<f32>;
 
 @fragment
 fn fragment(
@@ -25,18 +25,11 @@ fn fragment(
     @location(2) uv: vec2<f32>
 ) -> @location(0) vec4<f32> {
 
-    // Debugging: Hard-code the zoom value to see if shader updates
-    //let zoom: f32 = 2.0; // hardcoded value for zoom
-
-    // Debugging: Visualize UV coordinates
-    // return vec4<f32>(uv, 0.0, 1.0);
-
-    var c: vec2<f32> = (uv - vec2<f32>(0.5, 0.5)) * (4.0 * zoom) + offset;
+    // Use the transformed uv directly
+    var c: vec2<f32> = uv;
     var z: vec2<f32> = vec2<f32>(0.0, 0.0);
     var iteration: f32 = 0.0;
 
-    // Debugging: Hard-code max_iterations
-    // let max_iterations: f32 = 1000.0;
 
     // Check for early exit
     let q: f32 = (c.x - 0.25) * (c.x - 0.25) + c.y * c.y;
@@ -63,8 +56,24 @@ fn fragment(
     // Sample from the colormap texture
     let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(color, 0.5));
 
-    // Debugging: Output the calculated color without sampling the texture
-    // return vec4<f32>(color, color, color, 1.0);
+    // Color modulation based on chunk_offset (no changes here)
+    let modulated_color: vec4<f32> = vec4<f32>(
+        fract(chunk_offset.x * 0.1),
+        fract(chunk_offset.y * 0.1),
+        0.0,
+        1.0
+    );
 
-    return colormap_color;
+    // Unique color modulation based on chunk_id
+    let unique_chunk_color: vec4<f32> = vec4<f32>(
+        fract(chunk_id.x * 0.3), // Use chunk_id.x to modulate the Red component uniquely for this chunk
+        fract(chunk_id.y * 0.3), // Use chunk_id.y to modulate the Green component uniquely for this chunk
+        0.0,  // Blue component (unchanged, but you could use this for further distinction)
+        1.0   // Alpha (unchanged)
+    );
+
+    // Combine colormap_color, modulated_color and unique_chunk_color to form the final color
+    let combined_color = mix(mix(colormap_color, modulated_color, 0.5), unique_chunk_color, 0.9);
+
+    return combined_color;  // Return the final, uniquely modulated color
 }

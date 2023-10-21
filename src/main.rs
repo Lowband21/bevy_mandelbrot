@@ -28,12 +28,15 @@ mod prelude;
 mod ui;
 use crate::ui::UIPlugin;
 
+mod chunks;
+use crate::chunks::ChunkPlugin;
+
 // The main function to initialize and run the Bevy app.
 fn main() {
     // Initializing the Bevy app and adding various plugins.
     let _app = App::new()
         // Uncomment to set a custom clear color for the renderer.
-        .insert_resource(ClearColor(Color::hex("071f3c").unwrap()))
+        //.insert_resource(ClearColor(Color::hex("071f3c").unwrap()))
         .init_resource::<MandelbrotEntity>()
         .init_resource::<JuliaEntity>()
         .add_plugins(DefaultPlugins)
@@ -41,6 +44,7 @@ fn main() {
         .add_plugins(LogDiagnosticsPlugin::default()) // For logging diagnostics.
         .add_plugins(FrameTimeDiagnosticsPlugin::default()) // Diagnostics for frame time.
         .add_plugins(PanCamPlugin::default()) // Custom camera control plugin.
+        .add_plugins(ChunkPlugin)
         .add_plugins(UIPlugin)
         .add_plugins(AudioVizPlugin)
         .add_plugins(FractalControlPlugin)
@@ -68,12 +72,11 @@ fn setup(
             enabled: true,
             zoom_to_cursor: true,
             min_scale: 0.0000012,
-            max_scale: Some(20.0),
-            min_x: Some(-1.0),
-            min_y: Some(-1.0),
-            max_x: Some(1.0),
-            max_y: Some(1.0),
-            zoom: 1.0,
+            max_scale: Some(100.0),
+            //min_x: Some(-1.0),
+            //min_y: Some(-1.0),
+            //max_x: Some(1.0),
+            //max_y: Some(1.0),
             ..default()
         },
     ));

@@ -1,6 +1,7 @@
 use crate::prelude::*;
 use bevy::prelude::*;
 
+use crate::chunks::Chunk;
 use bevy::reflect::TypePath;
 use bevy::reflect::TypeUuid;
 use bevy::render::render_resource::{AsBindGroup, ShaderRef};
@@ -21,7 +22,7 @@ pub struct MandelbrotUniforms {
 }
 
 // Mandelbrot material definition. It holds parameters and texture for the Mandelbrot fractal.
-#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
+#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath, PartialEq)]
 #[uuid = "148ef22b-c53e-4bc2-982c-bb2b102e38f8"]
 pub struct MandelbrotMaterial {
     #[uniform(0)]
@@ -33,7 +34,13 @@ pub struct MandelbrotMaterial {
     #[uniform(3)]
     pub offset: Vec2,
     #[uniform(6)]
-    pub global_offset: Vec2,
+    pub chunk_zoom: f32,
+    #[uniform(7)]
+    pub chunk_offset: Vec2,
+    #[uniform(8)]
+    pub mouse_normalized_position: Vec2,
+    #[uniform(9)]
+    pub chunk_id: Vec2,
     #[texture(4)]
     #[sampler(5)]
     colormap_texture: Handle<Image>,
@@ -43,9 +50,9 @@ impl Material2d for MandelbrotMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/mandelbrot_fragment.wgsl".into()
     }
-    //fn vertex_shader() -> ShaderRef {
-    //    "shaders/mandelbrot_vertex.wgsl".into()
-    //}
+    fn vertex_shader() -> ShaderRef {
+        "shaders/mandelbrot_vertex.wgsl".into()
+    }
 }
 
 // Utility function to prepare and return a Mandelbrot material with the given uniforms.
@@ -53,14 +60,18 @@ pub fn prepare_mandelbrot_material(
     uniforms: &MandelbrotUniforms,
     colormap_texture_handle: Handle<Image>,
     materials: &mut ResMut<Assets<MandelbrotMaterial>>,
+    chunk: &Chunk,
 ) -> Handle<MandelbrotMaterial> {
     let material = MandelbrotMaterial {
         max_iterations: uniforms.max_iterations,
         color_scale: uniforms.color_scale,
         zoom: 4.5,
         offset: Vec2 { x: 0.0, y: 0.0 },
-        global_offset: Vec2 { x: 0.0, y: 0.0 } / 4.5,
+        chunk_offset: chunk.offset,
+        chunk_zoom: chunk.zoom,
         colormap_texture: colormap_texture_handle,
+        mouse_normalized_position: Vec2::new(0.0, 0.0),
+        chunk_id: chunk.offset * chunk.zoom,
     };
     materials.add(material)
 }
