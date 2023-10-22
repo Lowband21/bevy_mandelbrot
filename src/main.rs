@@ -34,6 +34,7 @@ fn main() {
     let _app = App::new()
         // Uncomment to set a custom clear color for the renderer.
         .insert_resource(ClearColor(Color::hex("071f3c").unwrap()))
+        .insert_resource(Msaa::Sample8)
         .init_resource::<MandelbrotEntity>()
         .init_resource::<JuliaEntity>()
         .add_plugins(DefaultPlugins)
@@ -81,7 +82,7 @@ fn setup(
             ..default()
         },
         PanCamState {
-            current_zoom: 1.0,
+            current_zoom: 0.5,
             target_zoom: 7.0,
             is_zooming: true,
             target_translation: None,

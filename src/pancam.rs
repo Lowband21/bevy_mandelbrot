@@ -77,7 +77,7 @@ fn apply_constraints_system(
     let window = primary_window.single();
     let window_size = Vec2::new(window.width(), window.height());
 
-    for (cam_conf, cam, mut proj, mut pos) in query.iter_mut() {
+    for (cam_conf, mut cam, mut proj, mut pos) in query.iter_mut() {
         let scale_constrained = BVec2::new(
             cam_conf.min_x.is_some() && cam_conf.max_x.is_some(),
             cam_conf.min_y.is_some() && cam_conf.max_y.is_some(),
@@ -89,6 +89,25 @@ fn apply_constraints_system(
         );
 
         let max_safe_scale = max_scale_within_bounds(bounds_size, &proj, window_size);
+
+        let max_scale = cam_conf
+            .max_scale
+            .unwrap_or(f32::INFINITY)
+            .min(if scale_constrained.x {
+                max_safe_scale.x
+            } else {
+                f32::INFINITY
+            })
+            .min(if scale_constrained.y {
+                max_safe_scale.y
+            } else {
+                f32::INFINITY
+            });
+
+        // Modify target_zoom if it is greater than max_scale
+        if cam.target_zoom > max_scale {
+            cam.target_zoom = max_scale;
+        }
 
         // Clamp to minimum scale
         proj.scale = proj.scale.max(cam_conf.min_scale);
@@ -161,7 +180,7 @@ fn zoom_interpolation_system(
 
             // Scaling interpolation
             let zoom_step = zoom_difference * interpolation_factor;
-            if zoom_difference.signum() == (cam.target_zoom - (proj.scale + zoom_step)).signum() {
+            if zoom_difference.signum() == (cam.target_zoom - (proj.scale + zoom_step)).signum(){
                 proj.scale += zoom_step;
             } else {
                 proj.scale = cam.target_zoom;
@@ -241,14 +260,14 @@ fn camera_zoom(
                 || proj.scale.signum() > cam.target_zoom.signum())
         {
             if proj.scale.signum() != cam.target_zoom.signum() {
-                scroll = 10.0; // adjust this value to your desired initial zoom factor
+                scroll = 0.1; // adjust this value to your desired initial zoom factor
             } else {
                 cam.first_zoom = false;
             }
         }
         if !cam.initialized && !cam.first_zoom {
             proj.scale = cam.current_zoom;
-            scroll = 10.0; // adjust this value to your desired initial zoom factor
+            scroll = 0.1; // adjust this value to your desired initial zoom factor
             cam.first_zoom = true;
             cam.is_zooming = true; // Ensure the camera starts zooming on initialization
             cam.initialized = true;

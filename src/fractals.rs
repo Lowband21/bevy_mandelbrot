@@ -92,8 +92,13 @@ fn uniform_update_system(
         return;
     }
     for (_, mut material) in materials.iter_mut() {
-        material.color_scale =
-            0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin());
+        let min_val = 0.05;
+        let max_val = 0.95;
+        let oscillation = (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+        
+        let range = max_val - min_val;
+        material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
+
         let pancam = pancam_query.get_single().unwrap();
         material.zoom = pancam.current_zoom;
 
