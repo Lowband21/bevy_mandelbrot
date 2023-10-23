@@ -1,10 +1,10 @@
-use crate::prelude::*;
+
 use bevy::prelude::*;
 
 use bevy::reflect::TypePath;
 use bevy::reflect::TypeUuid;
 use bevy::render::render_resource::{AsBindGroup, ShaderRef};
-use bevy::sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle};
+use bevy::sprite::{Material2d};
 
 #[derive(Resource)]
 pub struct MandelbrotEntity(pub Option<Entity>);

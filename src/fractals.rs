@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::sprite::MaterialMesh2dBundle;
 use bevy::sprite::Mesh2dHandle;
-use bevy_asset::{AssetServer, Handle};
+use bevy_asset::{AssetServer};
 
 use crate::audio::MusicUpdateToggle;
 use crate::julia_material::{prepare_julia_material, JuliaEntity, JuliaMaterial, JuliaUniforms};
@@ -93,7 +93,7 @@ fn uniform_update_system(
     if !toggle.active {
         return;
     }
-    for (_, mut material) in materials.iter_mut() {
+    for (_, material) in materials.iter_mut() {
         let min_val = 0.05;
         let max_val = 0.95;
         let oscillation = (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin();
@@ -117,7 +117,7 @@ fn uniform_update_system(
         material.offset = offset;
         material.global_offset = offset / pancam.current_zoom;
     }
-    for (_, mut material) in julia_materials.iter_mut() {
+    for (_, material) in julia_materials.iter_mut() {
         // Different frequencies and phase shifts for x and y components
         let min_val = 0.05;
         let max_val = 0.95;
@@ -137,7 +137,7 @@ fn uniform_update_system(
         material.c.x = min_c + c_range * cx_oscillation;
         material.c.y = min_c + c_range * cy_oscillation;
     }
-    for (_, mut material) in burning_ship_materials.iter_mut() {
+    for (_, material) in burning_ship_materials.iter_mut() {
         // Different frequencies and phase shifts for x and y components
         let min_val = 0.00;
         let max_val = 0.70;

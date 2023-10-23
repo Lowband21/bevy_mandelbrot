@@ -1,8 +1,8 @@
-use crate::prelude::*;
+
 use bevy::prelude::*;
 use bevy::reflect::{TypePath, TypeUuid};
 use bevy::render::render_resource::{AsBindGroup, ShaderRef};
-use bevy::sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle};
+use bevy::sprite::{Material2d};
 
 // Entity to represent Barnsley Fern
 #[derive(Resource)]

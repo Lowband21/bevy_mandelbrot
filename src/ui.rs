@@ -1,4 +1,4 @@
-use crate::audio::*;
+
 use crate::fractals::AnimationSpeed;
 use crate::JuliaMaterial;
 use crate::MandelbrotMaterial;
@@ -6,7 +6,7 @@ use crate::BurningShipMaterial;
 use crate::PanCamState;
 use bevy::prelude::*;
 
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy_egui::{egui, EguiContexts};
 
 #[derive(Default)]
 pub struct UIPlugin;
@@ -22,7 +22,7 @@ fn uniform_update_ui_system(
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
     mut julia_materials: ResMut<Assets<JuliaMaterial>>,
     mut burning_ship_materials: ResMut<Assets<BurningShipMaterial>>,
-    mut pancam_query: Query<&mut PanCamState>,
+    _pancam_query: Query<&mut PanCamState>,
     mut animation_speed: ResMut<AnimationSpeed>,
     mut query: Query<(&mut OrthographicProjection, &mut Transform)>,
 ) {

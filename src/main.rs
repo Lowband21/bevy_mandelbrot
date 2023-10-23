@@ -59,7 +59,7 @@ fn main() {
 // The setup function initializes entities in the Bevy app, such as the Mandelbrot mesh and camera.
 fn setup(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    _asset_server: Res<AssetServer>,
     //mut meshes: ResMut<Assets<Mesh>>,
     //mut materials: ResMut<Assets<MandelbrotMaterial>>,
     //mut julia_materials: ResMut<Assets<JuliaMaterial>>,

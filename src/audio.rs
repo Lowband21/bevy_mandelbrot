@@ -41,7 +41,7 @@ impl Default for MusicUpdateToggle {
     }
 }
 
-fn setup_audio(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_audio(mut commands: Commands, _asset_server: Res<AssetServer>) {
     //let music_handle = asset_server.load("audio/1-06 Solitude Is Bliss.flac");
 
     commands.spawn((
