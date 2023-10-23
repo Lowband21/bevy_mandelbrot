@@ -51,6 +51,10 @@ fn fragment(
     let basic_color = smooth_value / max_iterations;
     let color = pow(basic_color, 0.1) * (1.0 - color_scale) + color_scale;
 
+    let condition: f32 = step(0.99, color);
+    let black_color: vec4<f32> = vec4(0.0, 0.0, 0.0, 1.0);
     let colormap_color: vec4<f32> = textureSample(colormap_texture, colormap_sampler, vec2<f32>(color, 0.5));
-    return colormap_color;
+    
+    let final_color: vec4<f32> = mix(colormap_color, black_color, condition);
+    return final_color;
 }
