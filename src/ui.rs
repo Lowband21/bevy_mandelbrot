@@ -2,6 +2,7 @@ use crate::audio::*;
 use crate::fractals::AnimationSpeed;
 use crate::JuliaMaterial;
 use crate::MandelbrotMaterial;
+use crate::BurningShipMaterial;
 use crate::PanCamState;
 use bevy::prelude::*;
 
@@ -20,6 +21,7 @@ fn uniform_update_ui_system(
     mut ctx: EguiContexts,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
     mut julia_materials: ResMut<Assets<JuliaMaterial>>,
+    mut burning_ship_materials: ResMut<Assets<BurningShipMaterial>>,
     mut pancam_query: Query<&mut PanCamState>,
     mut animation_speed: ResMut<AnimationSpeed>,
     mut query: Query<(&mut OrthographicProjection, &mut Transform)>,
@@ -83,6 +85,32 @@ fn uniform_update_ui_system(
             for (mut proj, _pos) in &mut query {
                 ui.horizontal(|ui| {
                     ui.label("Julia Zoom:");
+                    ui.add(egui::Slider::new(&mut proj.scale, 0.0..=8.0));
+                });
+            }
+        }
+        if let Some(burning_ship_material) = burning_ship_materials.iter_mut().next() {
+            ui.horizontal(|ui| {
+                ui.label("Animation Speed:");
+                ui.add(egui::Slider::new(&mut animation_speed.0, 0.0..=0.1));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Burning Ship Color Scale:");
+                ui.add(egui::Slider::new(
+                    &mut burning_ship_material.1.color_scale,
+                    0.0..=1.0,
+                ));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Burning Ship Iterations:");
+                ui.add(egui::Slider::new(
+                    &mut burning_ship_material.1.max_iterations,
+                    0.0..=10000.0,
+                ));
+            });
+            for (mut proj, _pos) in &mut query {
+                ui.horizontal(|ui| {
+                    ui.label("Burning Ship Zoom:");
                     ui.add(egui::Slider::new(&mut proj.scale, 0.0..=8.0));
                 });
             }

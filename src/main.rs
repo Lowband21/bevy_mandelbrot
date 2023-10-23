@@ -23,6 +23,9 @@ use crate::julia_material::{JuliaEntity, JuliaMaterial};
 mod mandelbrot_material;
 use crate::mandelbrot_material::{MandelbrotEntity, MandelbrotMaterial};
 
+mod burning_ship_material;
+use crate::burning_ship_material::{BurningShipEntity, BurningShipMaterial};
+
 mod prelude;
 
 mod ui;
@@ -37,6 +40,7 @@ fn main() {
         .insert_resource(Msaa::Sample8)
         .init_resource::<MandelbrotEntity>()
         .init_resource::<JuliaEntity>()
+        .init_resource::<BurningShipEntity>()
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin)
         .add_plugins(LogDiagnosticsPlugin::default()) // For logging diagnostics.
@@ -48,6 +52,7 @@ fn main() {
         .add_systems(Startup, setup) // Setup function called at startup.
         .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default()) // Plugin for 2D materials.
         .add_plugins(Material2dPlugin::<JuliaMaterial>::default()) // Plugin for 2D materials.
+        .add_plugins(Material2dPlugin::<BurningShipMaterial>::default()) // Plugin for 2D materials.
         .run();
 }
 

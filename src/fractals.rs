@@ -9,11 +9,14 @@ use crate::mandelbrot_material::{
     prepare_mandelbrot_material, MandelbrotEntity, MandelbrotMaterial, MandelbrotUniforms,
 };
 use crate::PanCamState;
+use crate::burning_ship_material::{BurningShipEntity, BurningShipMaterial, prepare_burning_ship_material, BurningShipUniforms};
+
 
 #[derive(Resource)]
 enum FractalType {
     Mandelbrot,
     Julia,
+    BurningShip,
 }
 
 impl Default for FractalType {
@@ -56,9 +59,8 @@ impl Plugin for FractalControlPlugin {
     }
 }
 
-// System to toggle between Mandelbrot and Julia fractals
 fn fractal_toggle_system(
-    keyboard_input: Res<bevy::input::Input<KeyCode>>,
+    keyboard_input: Res<Input<KeyCode>>,
     mut fractal_type: ResMut<FractalType>,
     mut animation_toggle: ResMut<AnimationUpdateToggle>,
     mut music_toggle: ResMut<MusicUpdateToggle>,
@@ -66,15 +68,14 @@ fn fractal_toggle_system(
     if keyboard_input.just_pressed(KeyCode::Space) {
         *fractal_type = match *fractal_type {
             FractalType::Mandelbrot => FractalType::Julia,
-            FractalType::Julia => FractalType::Mandelbrot,
+            FractalType::Julia => FractalType::BurningShip,
+            FractalType::BurningShip => FractalType::Mandelbrot,
         };
     }
     if keyboard_input.just_pressed(KeyCode::A) {
-        // You can choose another key if needed
         animation_toggle.active = !animation_toggle.active;
     }
     if keyboard_input.just_pressed(KeyCode::M) {
-        // You can choose another key if needed
         music_toggle.active = !music_toggle.active;
     }
 }
@@ -84,6 +85,7 @@ fn uniform_update_system(
     time: Res<Time>,
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
     mut julia_materials: ResMut<Assets<JuliaMaterial>>, // For Julia material
+    mut burning_ship_materials: ResMut<Assets<BurningShipMaterial>>, // For Julia material
     toggle: Res<AnimationUpdateToggle>,
     animation_speed: ResMut<AnimationSpeed>,
     pancam_query: Query<&PanCamState>,
@@ -117,14 +119,32 @@ fn uniform_update_system(
     }
     for (_, mut material) in julia_materials.iter_mut() {
         // Different frequencies and phase shifts for x and y components
-        material.color_scale =
-            0.5 * (1.0 + (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin());
-        material.c.y =
-            0.8 * 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
-        material.c.x =
-            0.2 * 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
-
-        //println!("X: {}, Y: {}", material.c.x, material.c.y);
+        let min_val = 0.05;
+        let max_val = 0.95;
+        let oscillation = (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+        
+        let range = max_val - min_val;
+        material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
+        
+        // Restrict the range for c values
+        let max_c = 0.8;
+        let min_c = -0.8;
+        
+        let c_range = max_c - min_c;
+        let cx_oscillation = 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
+        let cy_oscillation = 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
+        
+        material.c.x = min_c + c_range * cx_oscillation;
+        material.c.y = min_c + c_range * cy_oscillation;
+    }
+    for (_, mut material) in burning_ship_materials.iter_mut() {
+        // Different frequencies and phase shifts for x and y components
+        let min_val = 0.00;
+        let max_val = 0.70;
+        let oscillation = (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+        
+        let range = max_val - min_val;
+        material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
     }
 }
 
@@ -135,12 +155,14 @@ fn fractal_update_system(
     entities: &Entities,
     mut commands: Commands,
     asset_server: Res<AssetServer>, // For loading assets
-    mut materials: ResMut<Assets<MandelbrotMaterial>>, // For Mandelbrot material
+    mut mandelbrot_materials: ResMut<Assets<MandelbrotMaterial>>, // For Mandelbrot material
     mut julia_materials: ResMut<Assets<JuliaMaterial>>, // For Julia material
+    mut burning_ship_materials: ResMut<Assets<BurningShipMaterial>>, // For Julia material
     mut meshes: ResMut<Assets<Mesh>>, // For meshes
     fractal_type: Res<FractalType>,
     mut mandelbrot_entity: ResMut<MandelbrotEntity>,
     mut julia_entity: ResMut<JuliaEntity>,
+    mut burning_ship_entity: ResMut<BurningShipEntity>,
 ) {
     if fractal_type.is_changed() {
         println!("Fractal Type Changed");
@@ -151,6 +173,10 @@ fn fractal_update_system(
             max_iterations: 5000.0,
         };
         let julia_uniforms = JuliaUniforms {
+            color_scale: 0.5,
+            max_iterations: 1000.0,
+        };
+        let burning_ship_uniforms = BurningShipUniforms {
             color_scale: 0.5,
             max_iterations: 1000.0,
         };
@@ -167,12 +193,17 @@ fn fractal_update_system(
                         commands.entity(entity).despawn();
                     }
                 }
+                if let Some(entity) = burning_ship_entity.0 {
+                    if entities.contains(entity) {
+                        commands.entity(entity).despawn();
+                    }
+                }
 
                 // Spawn Mandelbrot entity
                 let mandelbrot_material_handle = prepare_mandelbrot_material(
                     &mandelbrot_uniforms,
                     colormap_texture_handle.clone(),
-                    &mut materials,
+                    &mut mandelbrot_materials,
                 );
                 mandelbrot_entity.0 = Some(
                     commands
@@ -188,6 +219,11 @@ fn fractal_update_system(
             }
             FractalType::Julia => {
                 if let Some(entity) = mandelbrot_entity.0 {
+                    if entities.contains(entity) {
+                        commands.entity(entity).despawn();
+                    }
+                }
+                if let Some(entity) = burning_ship_entity.0 {
                     if entities.contains(entity) {
                         commands.entity(entity).despawn();
                     }
@@ -210,6 +246,36 @@ fn fractal_update_system(
                         .id(),
                 );
                 println!("Spawned Julia");
+            }
+            FractalType::BurningShip => {
+                if let Some(entity) = mandelbrot_entity.0 {
+                    if entities.contains(entity) {
+                        commands.entity(entity).despawn();
+                    }
+                }
+                if let Some(entity) = julia_entity.0 {
+                    if entities.contains(entity) {
+                        commands.entity(entity).despawn();
+                    }
+                }
+
+                // Spawn Sierpinski Triangle entity
+                let burning_ship_material_handle = prepare_burning_ship_material(
+                    &burning_ship_uniforms,
+                    colormap_texture_handle,
+                    &mut burning_ship_materials,
+                );
+                burning_ship_entity.0 = Some(
+                    commands
+                        .spawn(MaterialMesh2dBundle {
+                            mesh: mandelbrot_mesh.clone(),
+                            material: burning_ship_material_handle,
+                            transform: Transform::from_xyz(0.0, 0.5, 0.0),
+                            ..Default::default()
+                        })
+                        .id(),
+                );
+                println!("Spawned Sierpinski Triangle");
             }
         }
     }
