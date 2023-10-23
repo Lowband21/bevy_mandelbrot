@@ -7,7 +7,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Rusty Mandelbrot</string>
 	<key>CFBundleExecutable</key>
-	<string>bevy_mandelbrot</string>
+	<string>RustyMandelbrot</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon.icns</string>
 	<key>CFBundleIdentifier</key>
