@@ -6,10 +6,10 @@ use bevy::prelude::*;
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::sprite::Material2dPlugin;
-use bevy_egui::EguiPlugin;
+//use bevy_egui::EguiPlugin;
 
 mod audio;
-use crate::audio::AudioVizPlugin;
+//use crate::audio::AudioVizPlugin;
 
 mod fractals;
 use crate::fractals::FractalControlPlugin;
@@ -29,7 +29,7 @@ use crate::burning_ship_material::{BurningShipEntity, BurningShipMaterial};
 mod prelude;
 
 mod ui;
-use crate::ui::UIPlugin;
+//use crate::ui::UIPlugin;
 
 // The main function to initialize and run the Bevy app.
 fn main() {
@@ -42,12 +42,12 @@ fn main() {
         .init_resource::<JuliaEntity>()
         .init_resource::<BurningShipEntity>()
         .add_plugins(DefaultPlugins)
-        .add_plugins(EguiPlugin)
+        //.add_plugins(EguiPlugin)
         .add_plugins(LogDiagnosticsPlugin::default()) // For logging diagnostics.
         .add_plugins(FrameTimeDiagnosticsPlugin::default()) // Diagnostics for frame time.
         .add_plugins(PanCamPlugin::default()) // Custom camera control plugin.
-        .add_plugins(UIPlugin)
-        .add_plugins(AudioVizPlugin)
+        //.add_plugins(UIPlugin)
+        //.add_plugins(AudioVizPlugin)
         .add_plugins(FractalControlPlugin)
         .add_systems(Startup, setup) // Setup function called at startup.
         .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default()) // Plugin for 2D materials.

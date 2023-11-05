@@ -20,7 +20,7 @@ pub struct BurningShipUniforms {
 }
 
 // Sierpinski Triangle material definition.
-#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
+#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath, Asset)]
 #[uuid = "0e17159a-ca90-4cd1-a40e-ab12c9455c11"]
 pub struct BurningShipMaterial {
     #[uniform(0)]

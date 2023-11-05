@@ -22,7 +22,7 @@ pub struct JuliaUniforms {
 }
 
 // Julia material definition. It holds parameters and texture for the Julia fractal.
-#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
+#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath, Asset)]
 #[uuid = "258ef34b-d54f-4bc3-993b-bc3e203a48f9"]
 pub struct JuliaMaterial {
     #[uniform(0)]

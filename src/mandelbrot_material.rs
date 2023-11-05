@@ -21,7 +21,7 @@ pub struct MandelbrotUniforms {
 }
 
 // Mandelbrot material definition. It holds parameters and texture for the Mandelbrot fractal.
-#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath)]
+#[derive(Component, Debug, Clone, AsBindGroup, TypeUuid, TypePath, Asset)]
 #[uuid = "148ef22b-c53e-4bc2-982c-bb2b102e38f8"]
 pub struct MandelbrotMaterial {
     #[uniform(0)]

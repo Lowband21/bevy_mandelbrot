@@ -6,8 +6,9 @@ use crate::BurningShipMaterial;
 use crate::PanCamState;
 use bevy::prelude::*;
 
-use bevy_egui::{egui, EguiContexts};
+//use bevy_egui::{egui, EguiContexts};
 
+/*
 #[derive(Default)]
 pub struct UIPlugin;
 
@@ -117,3 +118,6 @@ fn uniform_update_ui_system(
         }
     });
 }
+
+
+ */

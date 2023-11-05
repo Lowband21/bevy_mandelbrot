@@ -3,7 +3,7 @@ use bevy::sprite::MaterialMesh2dBundle;
 use bevy::sprite::Mesh2dHandle;
 use bevy_asset::{AssetServer};
 
-use crate::audio::MusicUpdateToggle;
+//use crate::audio::MusicUpdateToggle;
 use crate::julia_material::{prepare_julia_material, JuliaEntity, JuliaMaterial, JuliaUniforms};
 use crate::mandelbrot_material::{
     prepare_mandelbrot_material, MandelbrotEntity, MandelbrotMaterial, MandelbrotUniforms,
@@ -63,7 +63,7 @@ fn fractal_toggle_system(
     keyboard_input: Res<Input<KeyCode>>,
     mut fractal_type: ResMut<FractalType>,
     mut animation_toggle: ResMut<AnimationUpdateToggle>,
-    mut music_toggle: ResMut<MusicUpdateToggle>,
+    //mut music_toggle: ResMut<MusicUpdateToggle>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
         *fractal_type = match *fractal_type {
@@ -75,9 +75,9 @@ fn fractal_toggle_system(
     if keyboard_input.just_pressed(KeyCode::A) {
         animation_toggle.active = !animation_toggle.active;
     }
-    if keyboard_input.just_pressed(KeyCode::M) {
-        music_toggle.active = !music_toggle.active;
-    }
+    //if keyboard_input.just_pressed(KeyCode::M) {
+    //    music_toggle.active = !music_toggle.active;
+    //}
 }
 
 // System to update the Mandelbrot material's color_scale based on time.
@@ -96,7 +96,7 @@ fn uniform_update_system(
     for (_, material) in materials.iter_mut() {
         let min_val = 0.05;
         let max_val = 0.95;
-        let oscillation = (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+        let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
         
         let range = max_val - min_val;
         material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
@@ -121,7 +121,7 @@ fn uniform_update_system(
         // Different frequencies and phase shifts for x and y components
         let min_val = 0.05;
         let max_val = 0.95;
-        let oscillation = (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+        let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
         
         let range = max_val - min_val;
         material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
@@ -131,8 +131,8 @@ fn uniform_update_system(
         let min_c = -0.8;
         
         let c_range = max_c - min_c;
-        let cx_oscillation = 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
-        let cy_oscillation = 0.5 * (1.0 - (time.raw_elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
+        let cx_oscillation = 0.5 * (1.0 - (time.elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
+        let cy_oscillation = 0.5 * (1.0 - (time.elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
         
         material.c.x = min_c + c_range * cx_oscillation;
         material.c.y = min_c + c_range * cy_oscillation;
@@ -141,7 +141,7 @@ fn uniform_update_system(
         // Different frequencies and phase shifts for x and y components
         let min_val = 0.00;
         let max_val = 0.70;
-        let oscillation = (time.raw_elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+        let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
         
         let range = max_val - min_val;
         material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
