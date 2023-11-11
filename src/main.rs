@@ -8,23 +8,18 @@ use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::sprite::Material2dPlugin;
 use bevy_egui::EguiPlugin;
 
-mod audio;
-use crate::audio::AudioVizPlugin;
-
 mod fractals;
 use crate::fractals::FractalControlPlugin;
 
 mod pancam;
 use crate::pancam::{PanCamConfig, PanCamPlugin, PanCamState};
 
-mod julia_material;
-use crate::julia_material::{JuliaEntity, JuliaMaterial};
+mod materials;
+use crate::materials::{JuliaEntity, JuliaMaterial};
 
-mod mandelbrot_material;
-use crate::mandelbrot_material::{MandelbrotEntity, MandelbrotMaterial};
+use crate::materials::{MandelbrotEntity, MandelbrotMaterial};
 
-mod burning_ship_material;
-use crate::burning_ship_material::{BurningShipEntity, BurningShipMaterial};
+use crate::materials::{BurningShipEntity, BurningShipMaterial};
 
 mod prelude;
 
@@ -37,7 +32,7 @@ fn main() {
     let _app = App::new()
         // Uncomment to set a custom clear color for the renderer.
         .insert_resource(ClearColor(Color::hex("071f3c").unwrap()))
-        .insert_resource(Msaa::Sample8)
+        .insert_resource(Msaa::Sample4)
         .init_resource::<MandelbrotEntity>()
         .init_resource::<JuliaEntity>()
         .init_resource::<BurningShipEntity>()
@@ -47,7 +42,6 @@ fn main() {
         .add_plugins(FrameTimeDiagnosticsPlugin::default()) // Diagnostics for frame time.
         .add_plugins(PanCamPlugin::default()) // Custom camera control plugin.
         .add_plugins(UIPlugin)
-        .add_plugins(AudioVizPlugin)
         .add_plugins(FractalControlPlugin)
         .add_systems(Startup, setup) // Setup function called at startup.
         .add_plugins(Material2dPlugin::<MandelbrotMaterial>::default()) // Plugin for 2D materials.
@@ -57,15 +51,7 @@ fn main() {
 }
 
 // The setup function initializes entities in the Bevy app, such as the Mandelbrot mesh and camera.
-fn setup(
-    mut commands: Commands,
-    //_asset_server: Res<AssetServer>,
-    //mut meshes: ResMut<Assets<Mesh>>,
-    //mut materials: ResMut<Assets<MandelbrotMaterial>>,
-    //mut julia_materials: ResMut<Assets<JuliaMaterial>>,
-    //mut mandelbrot_entity: ResMut<MandelbrotEntity>,
-    //mut julia_entity: ResMut<JuliaEntity>,
-) {
+fn setup(mut commands: Commands) {
     // Add a camera with custom pan and zoom capabilities.
     commands.spawn((
         Camera2dBundle::default(),
