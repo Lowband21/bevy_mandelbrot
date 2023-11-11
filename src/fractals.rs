@@ -90,62 +90,64 @@ fn uniform_update_system(
     toggle: Res<AnimationUpdateToggle>,
     animation_speed: ResMut<AnimationSpeed>,
     pancam_query: Query<&PanCamState>,
+    fractal_type: Res<FractalType>,
 ) {
     if !toggle.active {
         return;
     }
-    for (_, material) in materials.iter_mut() {
-        let min_val = 0.05;
-        let max_val = 0.95;
-        let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+    match *fractal_type {
+        FractalType::Mandelbrot => {
+            for (_, material) in materials.iter_mut() {
+                let min_val = 0.05;
+                let max_val = 0.95;
+                let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
 
-        let range = max_val - min_val;
-        material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
+                let range = max_val - min_val;
+                material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
 
-        let pancam = pancam_query.get_single().unwrap();
-        material.zoom = pancam.current_zoom;
+                let pancam = pancam_query.get_single().unwrap();
+                material.zoom = pancam.current_zoom;
 
-        let offset = Vec2::new(
-            pancam
-                .target_translation
-                .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
-                .x,
-            pancam
-                .target_translation
-                .unwrap_or(Vec3::new(0.0, 0.0, 0.0))
-                .y,
-        );
-        material.offset = offset;
-        material.global_offset = offset / pancam.current_zoom;
-    }
-    for (_, material) in julia_materials.iter_mut() {
-        // Different frequencies and phase shifts for x and y components
-        let min_val = 0.05;
-        let max_val = 0.95;
-        let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+                let offset = pancam.uv_offset;
+                material.offset = offset;
+                material.global_offset = offset / pancam.current_zoom;
+            }
+        }
+        FractalType::Julia => {
+            for (_, material) in julia_materials.iter_mut() {
+                // Different frequencies and phase shifts for x and y components
+                let min_val = 0.05;
+                let max_val = 0.95;
+                let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
 
-        let range = max_val - min_val;
-        material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
+                let range = max_val - min_val;
+                material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
 
-        // Restrict the range for c values
-        let max_c = 0.8;
-        let min_c = -0.8;
+                // Restrict the range for c values
+                let max_c = 0.8;
+                let min_c = -0.8;
 
-        let c_range = max_c - min_c;
-        let cx_oscillation = 0.5 * (1.0 - (time.elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
-        let cy_oscillation = 0.5 * (1.0 - (time.elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
+                let c_range = max_c - min_c;
+                let cx_oscillation =
+                    0.5 * (1.0 - (time.elapsed_seconds_f64() as f32 * 0.1 - 0.5).cos());
+                let cy_oscillation =
+                    0.5 * (1.0 - (time.elapsed_seconds_f64() as f32 * 0.15 + 0.5).cos());
 
-        material.c.x = min_c + c_range * cx_oscillation;
-        material.c.y = min_c + c_range * cy_oscillation;
-    }
-    for (_, material) in burning_ship_materials.iter_mut() {
-        // Different frequencies and phase shifts for x and y components
-        let min_val = 0.00;
-        let max_val = 0.70;
-        let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
+                material.c.x = min_c + c_range * cx_oscillation;
+                material.c.y = min_c + c_range * cy_oscillation;
+            }
+        }
+        FractalType::BurningShip => {
+            for (_, material) in burning_ship_materials.iter_mut() {
+                // Different frequencies and phase shifts for x and y components
+                let min_val = 0.00;
+                let max_val = 0.70;
+                let oscillation = (time.elapsed_seconds_f64() as f32 * animation_speed.0).sin();
 
-        let range = max_val - min_val;
-        material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
+                let range = max_val - min_val;
+                material.color_scale = min_val + (range / 2.0) * (oscillation + 1.0);
+            }
+        }
     }
 }
 
@@ -164,6 +166,7 @@ fn fractal_update_system(
     mut mandelbrot_entity: ResMut<MandelbrotEntity>,
     mut julia_entity: ResMut<JuliaEntity>,
     mut burning_ship_entity: ResMut<BurningShipEntity>,
+    pancam_query: Query<&PanCamState>,
 ) {
     if fractal_type.is_changed() {
         println!("Fractal Type Changed");
@@ -205,6 +208,7 @@ fn fractal_update_system(
                     &mandelbrot_uniforms,
                     colormap_texture_handle.clone(),
                     &mut mandelbrot_materials,
+                    pancam_query.get_single().unwrap().current_zoom,
                 );
                 mandelbrot_entity.0 = Some(
                     commands

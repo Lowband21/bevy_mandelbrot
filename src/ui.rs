@@ -1,8 +1,7 @@
-
 use crate::fractals::AnimationSpeed;
+use crate::BurningShipMaterial;
 use crate::JuliaMaterial;
 use crate::MandelbrotMaterial;
-use crate::BurningShipMaterial;
 use crate::PanCamState;
 use bevy::prelude::*;
 
@@ -22,7 +21,7 @@ fn uniform_update_ui_system(
     mut materials: ResMut<Assets<MandelbrotMaterial>>,
     mut julia_materials: ResMut<Assets<JuliaMaterial>>,
     mut burning_ship_materials: ResMut<Assets<BurningShipMaterial>>,
-    _pancam_query: Query<&mut PanCamState>,
+    mut pancam_query: Query<&mut PanCamState>,
     mut animation_speed: ResMut<AnimationSpeed>,
     mut query: Query<(&mut OrthographicProjection, &mut Transform)>,
 ) {
@@ -48,10 +47,13 @@ fn uniform_update_ui_system(
                 ));
             });
 
-            for (mut proj, _pos) in &mut query {
+            for mut cam_state in &mut pancam_query.iter_mut() {
                 ui.horizontal(|ui| {
                     ui.label("Mandelbrot Zoom:");
-                    ui.add(egui::Slider::new(&mut proj.scale, 0.0..=8.0));
+                    ui.add(egui::Slider::new(
+                        &mut cam_state.current_zoom,
+                        0.000001..=200.0,
+                    ));
                 });
             }
         }
@@ -82,10 +84,10 @@ fn uniform_update_ui_system(
                 ui.label("Julia c.y:");
                 ui.add(egui::Slider::new(&mut julia_material.1.c.y, -2.0..=2.0));
             });
-            for (mut proj, _pos) in &mut query {
+            for mut cam_state in &mut pancam_query.iter_mut() {
                 ui.horizontal(|ui| {
                     ui.label("Julia Zoom:");
-                    ui.add(egui::Slider::new(&mut proj.scale, 0.0..=8.0));
+                    ui.add(egui::Slider::new(&mut cam_state.current_zoom, 0.0..=8.0));
                 });
             }
         }

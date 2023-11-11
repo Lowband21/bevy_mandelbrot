@@ -180,10 +180,12 @@ fn zoom_interpolation_system(
 
             // Scaling interpolation
             let zoom_step = zoom_difference * interpolation_factor;
-            if zoom_difference.signum() == (cam.target_zoom - (proj.scale + zoom_step)).signum(){
-                proj.scale += zoom_step;
+            if zoom_difference.signum() == (cam.target_zoom - (proj.scale + zoom_step)).signum() {
+                //proj.scale += zoom_step;
+                cam.current_zoom += zoom_step;
             } else {
-                proj.scale = cam.target_zoom;
+                //proj.scale = cam.target_zoom;
+                cam.current_zoom = cam.target_zoom;
                 cam.first_zoom = false;
             }
 
@@ -352,7 +354,7 @@ fn camera_movement(
     };
     let delta_device_pixels = current_pos - last_pos.unwrap_or(current_pos);
 
-    for (cam_conf, cam, mut transform, projection) in &mut query {
+    for (cam_conf, mut cam, mut transform, projection) in &mut query {
         if cam_conf.enabled
             && cam_conf
                 .grab_buttons
@@ -365,7 +367,11 @@ fn camera_movement(
 
             if !cam.is_zooming {
                 // Handle panning
-                transform.translation -= delta_world.extend(0.0);
+                //transform.translation -= delta_world.extend(0.0);
+                cam.uv_offset -= Vec2::new(
+                    delta_world.x / window_size.x,
+                    -delta_world.y / window_size.y,
+                );
             }
 
             // Apply boundary constraints
@@ -444,6 +450,7 @@ pub struct PanCamState {
     pub delta_zoom_translation: Option<Vec3>,
     pub first_zoom: bool,
     pub initialized: bool,
+    pub uv_offset: Vec2,
 }
 
 impl Default for PanCamState {
@@ -456,6 +463,7 @@ impl Default for PanCamState {
             delta_zoom_translation: None,
             first_zoom: false,
             initialized: false,
+            uv_offset: Vec2::new(0.3, 0.5),
         }
     }
 }

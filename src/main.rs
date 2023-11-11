@@ -21,8 +21,6 @@ use crate::materials::{MandelbrotEntity, MandelbrotMaterial};
 
 use crate::materials::{BurningShipEntity, BurningShipMaterial};
 
-mod prelude;
-
 mod ui;
 use crate::ui::UIPlugin;
 
@@ -58,8 +56,8 @@ fn setup(mut commands: Commands) {
         PanCamConfig {
             grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
             enabled: true,
-            zoom_to_cursor: true,
-            min_scale: 0.00012,
+            zoom_to_cursor: false,
+            min_scale: 0.0000012,
             max_scale: Some(20.0),
             min_x: Some(-5000.0),
             min_y: Some(-5000.0),
@@ -73,9 +71,9 @@ fn setup(mut commands: Commands) {
             ..default()
         },
         PanCamState {
-            current_zoom: 0.5,
-            target_zoom: 7.0,
-            is_zooming: true,
+            current_zoom: 5.0,
+            target_zoom: 5.0,
+            is_zooming: false,
             target_translation: None,
             delta_zoom_translation: None,
             ..default()

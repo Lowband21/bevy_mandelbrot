@@ -47,11 +47,12 @@ pub fn prepare_mandelbrot_material(
     uniforms: &MandelbrotUniforms,
     colormap_texture_handle: Handle<Image>,
     materials: &mut ResMut<Assets<MandelbrotMaterial>>,
+    zoom: f32,
 ) -> Handle<MandelbrotMaterial> {
     let material = MandelbrotMaterial {
         max_iterations: uniforms.max_iterations,
         color_scale: uniforms.color_scale,
-        zoom: 4.5,
+        zoom,
         offset: Vec2 { x: 0.0, y: 0.0 },
         global_offset: Vec2 { x: 0.0, y: 0.0 } / 4.5,
         colormap_texture: colormap_texture_handle,
